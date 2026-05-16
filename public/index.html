@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Duplex Voice Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="status-bar">
+        <div>
+          <h1>Duplex Voice Demo</h1>
+          <p id="health">checking</p>
+        </div>
+        <div class="controls">
+          <button id="startBtn" type="button">Start</button>
+          <button id="stopBtn" type="button" disabled>Stop</button>
+          <button id="resetBtn" type="button">Reset</button>
+        </div>
+      </section>
+
+      <section class="meters">
+        <label>
+          <span>Mic</span>
+          <meter id="level" min="0" max="1" value="0"></meter>
+        </label>
+        <div id="state" class="state">idle</div>
+      </section>
+
+      <section class="transcript" id="log"></section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
