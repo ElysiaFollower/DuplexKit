@@ -8,16 +8,16 @@
 ## 仓库状态
 
 - 分支：main
-- 提交：尚无提交
-- 脏文件：harness scaffold 初始化中
+- 提交：`6861bd1 feat: scaffold duplex voice demo service` 后仍有未提交运行路径/README/test 更新
+- 脏文件：README、docs、src、tests、tsconfig、harness 状态更新
 - 当前计划：`plans/active/2026-05-17-duplex-demo.md`
-- 当前功能项：F002 浏览器到后端的全双工语音 demo
+- 当前功能项：F003 blocked，等待 `VOLCENGINE_ASR_APP_KEY`
 
 ## 当前已验证状态
 
-- 上次运行命令：`./scripts/harness-check.sh`
-- 结果：通过，0 警告
-- 证据：F001 evidence 已写入 `harness/feature_list.json`
+- 上次运行命令：`npm test`; `npm run build`; `DEMO_MOCK=1 PORT=5178 npm start` + curl/browser smoke
+- 结果：测试、构建、mock HTTP 和页面加载通过
+- 证据：F002 evidence 已写入 `harness/feature_list.json`；配置检查显示真实模式缺 `VOLCENGINE_ASR_APP_KEY`
 
 ## 本会话改动
 
@@ -25,26 +25,28 @@
 - 创建并填写 repo-native harness scaffold。
 - 记录全双工语音 demo 的目标、范围、架构方向和 active plan。
 - 将 F001 标记为 passing，F002 标记为 active。
+- 创建 Fastify 后端、浏览器采集页、外部 API providers、mock providers、测试。
+- 补 README 和 API 集成文档。
 
 ## 仍损坏或未验证
 
-- 业务 demo 尚未实现。
-- npm 项目骨架尚未创建。
-- API 密钥尚未复制到本仓库 `.env`。
+- 真实火山 ASR 未验证，因为当前 `.env` 缺 `VOLCENGINE_ASR_APP_KEY`。
+- 真实火山 TTS 未验证；当前会尝试使用 `VOLCENGINE_API_KEY`，该 key 是否有 speech TTS 权限待确认。
+- 自动化未点击浏览器麦克风权限；需要用户本机手动授权后测试真实说话。
 
 ## 清洁状态
 
-- 构建/静态检查：待 Node 项目创建后验证
-- 测试/端到端：待 F002 实现
+- 构建/静态检查：`npm run build` 通过
+- 测试/端到端：`npm test` 通过；mock HTTP/browser smoke 通过；真实 API 待补 key
 - 进度文件同步：已同步到 feature_list、progress、handoff
 - 临时工件：无
 - 启动路径：harness 可检查，业务启动待实现
 
 ## 下一步最佳动作
 
-1. 提交 F001 初始化检查点。
-2. 从 DreamingRAG `.env` 复制必要 API 变量到本仓库 `.env`，同时生成 `.env.example`。
-3. 创建后端服务、API 客户端、浏览器 demo 和测试。
+1. 提交运行路径、README、服务 smoke test 和状态更新。
+2. 若要真实链路，补 `VOLCENGINE_ASR_APP_KEY` 到 `.env` 后运行 `npm run dev`，打开 `http://localhost:5177` 手动授权麦克风。
+3. 如 TTS 报鉴权错误，补 `VOLCENGINE_TTS_API_KEY` 到 `.env`。
 
 ## 命令
 

@@ -7,10 +7,10 @@
 
 ## 当前状态
 
-- 当前功能项：F002 浏览器到后端的全双工语音 demo
+- 当前功能项：无 active；F003 因缺火山 ASR app key blocked
 - 当前任务计划：`plans/active/2026-05-17-duplex-demo.md`
-- 上次验证：`./scripts/harness-check.sh` 通过，0 警告
-- 下一步最佳动作：提交 F001 初始化检查点，然后创建 Node/TypeScript demo 骨架。
+- 上次验证：`npm test`、`npm run build`、mock server smoke、Browser 页面加载均通过
+- 下一步最佳动作：提交 F002；补齐火山 ASR app key 后做 F003 真实麦克风链路验证。在缺 key 时可用 `DEMO_MOCK=1 npm start` 体验页面和状态机。
 
 ## 状态约定
 
@@ -27,3 +27,10 @@
 - 写入全双工语音 demo 的项目目标、范围、验证阶梯、active plan 和功能清单。
 - 验证：`./scripts/harness-check.sh` 通过，0 警告。
 - 下一步：提交初始化检查点并进入 F002。
+
+### 2026-05-17 - Demo 服务骨架与 mock 链路
+
+- 创建 Node/TypeScript/Fastify 后端、OpenAI-compatible LLM 客户端、火山 ASR/TTS 客户端、浏览器 Web Audio VAD/WAV 采集页面。
+- 从 DreamingRAG `.env` 复制本地 `.env`，不提交密钥。
+- 发现真实模式仍缺 `VOLCENGINE_ASR_APP_KEY`；已有 `DEEPSEEK_API_KEY`，TTS 会尝试使用 `VOLCENGINE_API_KEY`。
+- 验证：`npm test` 通过，4 files / 8 tests；`npm run build` 通过；`DEMO_MOCK=1 PORT=5178 npm start` 后 `/api/health`、`/api/turn`、`/` smoke 通过；内置浏览器打开页面显示 ready。

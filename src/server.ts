@@ -1,5 +1,4 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { ZodError } from "zod";
@@ -11,12 +10,9 @@ import { OpenAiCompatLlmProvider } from "./providers/openaiCompat.js";
 import { VolcengineFlashAsrProvider } from "./providers/volcengineAsr.js";
 import { VolcengineSseTtsProvider } from "./providers/volcengineTts.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, "..");
-
 export function buildServer(config: AppConfig = loadConfig()) {
   const app = Fastify({
-    logger: true,
+    logger: process.env.NODE_ENV !== "test",
     bodyLimit: 25 * 1024 * 1024
   });
 
@@ -31,7 +27,7 @@ export function buildServer(config: AppConfig = loadConfig()) {
   );
 
   app.register(fastifyStatic, {
-    root: path.join(repoRoot, "public"),
+    root: path.join(process.cwd(), "public"),
     prefix: "/"
   });
 
