@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "wip_limit": 1,
+  "status_values": ["not_started", "active", "blocked", "passing"],
+  "features": [
+    {
+      "id": "F001",
+      "priority": "P0",
+      "area": "harness",
+      "title": "初始化 repo-native harness",
+      "behavior": "新 agent 只看仓库即可理解项目目标、启动方式、验证阶梯、当前进度和下一步。",
+      "status": "passing",
+      "verification": "./scripts/harness-check.sh",
+      "evidence": "2026-05-17: ./scripts/harness-check.sh -> Harness 检查通过，共 0 个警告。",
+      "notes": "初始化阶段不实现业务功能；通过后提交独立检查点。"
+    },
+    {
+      "id": "F002",
+      "priority": "P0",
+      "area": "demo",
+      "title": "浏览器到后端的全双工语音 demo",
+      "behavior": "浏览器采集麦克风并播放 TTS；后端完成 ASR、LLM、TTS 编排；用户说话时可中断正在播放的回复。",
+      "status": "active",
+      "verification": "npm test && npm run build；手动运行 npm run dev 后完成一次语音输入、回复播放和打断。",
+      "evidence": "",
+      "notes": "首版追求效果可用，不追求模型级原生实时全双工。"
+    }
+  ]
+}
