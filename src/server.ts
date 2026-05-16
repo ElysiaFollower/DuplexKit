@@ -5,6 +5,8 @@ import { ZodError } from "zod";
 import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
 import { DuplexService } from "./duplexService.js";
 import { StageError } from "./errors.js";
+import { FallbackTtsProvider } from "./providers/fallbackTts.js";
+import { MacSayTtsProvider } from "./providers/macSayTts.js";
 import { MockAsrProvider, MockLlmProvider, MockTtsProvider } from "./providers/mock.js";
 import { OpenAiCompatLlmProvider } from "./providers/openaiCompat.js";
 import { VolcengineFlashAsrProvider } from "./providers/volcengineAsr.js";
@@ -16,13 +18,18 @@ export function buildServer(config: AppConfig = loadConfig()) {
     bodyLimit: 25 * 1024 * 1024
   });
 
+  const realTtsProvider =
+    config.tts.localFallback && process.platform === "darwin"
+      ? new FallbackTtsProvider(new VolcengineSseTtsProvider(config.tts), new MacSayTtsProvider())
+      : new VolcengineSseTtsProvider(config.tts);
+
   const service = new DuplexService(
     config.demoMock
       ? { asr: new MockAsrProvider(), llm: new MockLlmProvider(), tts: new MockTtsProvider() }
       : {
           asr: new VolcengineFlashAsrProvider(config.asr),
           llm: new OpenAiCompatLlmProvider(config.llm),
-          tts: new VolcengineSseTtsProvider(config.tts)
+          tts: realTtsProvider
         }
   );
 

@@ -9,8 +9,8 @@
 
 - 当前功能项：无 active；F003 因缺火山 ASR app key blocked
 - 当前任务计划：`plans/active/2026-05-17-duplex-demo.md`
-- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、Browser 页面加载均通过
-- 下一步最佳动作：提交 F002；补齐火山 ASR app key 后做 F003 真实麦克风链路验证。在缺 key 时可用 `DEMO_MOCK=1 npm start` 体验页面和状态机。
+- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、Browser 页面加载、真实 LLM + macOS TTS fallback 均通过
+- 下一步最佳动作：提交 fallback 收口；补齐火山 ASR/TTS speech key 后做 F003 纯火山语音链路验证。在缺 key 时可用浏览器 ASR + macOS TTS fallback 体验效果。
 
 ## 状态约定
 
@@ -30,7 +30,8 @@
 
 ### 2026-05-17 - Demo 服务骨架与 mock 链路
 
-- 创建 Node/TypeScript/Fastify 后端、OpenAI-compatible LLM 客户端、火山 ASR/TTS 客户端、浏览器 Web Audio VAD/WAV 采集页面和文本回合降级入口。
+- 创建 Node/TypeScript/Fastify 后端、OpenAI-compatible LLM 客户端、火山 ASR/TTS 客户端、浏览器 Web Audio VAD/WAV 采集页面、浏览器 ASR 降级、文本回合降级入口和 macOS TTS fallback。
 - 从 DreamingRAG `.env` 复制本地 `.env`，不提交密钥。
 - 发现真实模式仍缺 `VOLCENGINE_ASR_APP_KEY`；已有 `DEEPSEEK_API_KEY`，TTS 会尝试使用 `VOLCENGINE_API_KEY`。
-- 验证：`npm test` 通过，4 files / 10 tests；`npm run build` 通过；`npm run smoke:mock` 通过；内置浏览器打开页面显示 ready，文本入口提交后显示 speaking 并播放 mock audio。
+- 发现 `VOLCENGINE_API_KEY` 调火山 TTS SSE 返回 `Invalid X-Api-Key`，因此补 macOS TTS fallback。
+- 验证：`npm test` 通过，5 files / 11 tests；`npm run build` 通过；`npm run smoke:mock` 通过；内置浏览器打开页面显示 ready，文本入口提交后显示 speaking 并播放 mock audio；真实 `/api/text-turn` 走 DeepSeek LLM + macOS TTS fallback 返回 audio/wav。

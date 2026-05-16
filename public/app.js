@@ -13,12 +13,15 @@ let audioContext;
 let source;
 let processor;
 let mediaStream;
+let recognition;
 let running = false;
 let speaking = false;
 let segment = [];
 let preRoll = [];
 let silenceMs = 0;
 let currentAudio = null;
+let browserAsrMode = false;
+let healthMissingAsr = false;
 
 const sampleRate = 16000;
 const frameMs = 2048 / 48000 * 1000;
@@ -42,13 +45,21 @@ async function checkHealth() {
     const response = await fetch("/api/health");
     const data = await response.json();
     const missing = data.config?.missing || [];
-    healthEl.textContent = missing.length ? `missing: ${missing.join(", ")}` : "ready";
+    healthMissingAsr = missing.includes("VOLCENGINE_ASR_APP_KEY");
+    const browserAsrAvailable = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+    healthEl.textContent = missing.length
+      ? `missing: ${missing.join(", ")}${healthMissingAsr && browserAsrAvailable ? "; browser ASR fallback available" : ""}`
+      : "ready";
   } catch (error) {
     healthEl.textContent = `health failed: ${error.message}`;
   }
 }
 
 async function start() {
+  if (healthMissingAsr && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
+    startBrowserAsr();
+    return;
+  }
   mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   audioContext = new AudioContext();
   source = audioContext.createMediaStreamSource(mediaStream);
@@ -64,6 +75,9 @@ async function start() {
 
 function stop() {
   running = false;
+  recognition?.stop();
+  recognition = null;
+  browserAsrMode = false;
   processor?.disconnect();
   source?.disconnect();
   mediaStream?.getTracks().forEach((track) => track.stop());
@@ -72,6 +86,38 @@ function stop() {
   startBtn.disabled = false;
   stopBtn.disabled = true;
   setState("idle");
+}
+
+function startBrowserAsr() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new Recognition();
+  recognition.lang = "zh-CN";
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.onstart = () => {
+    running = true;
+    browserAsrMode = true;
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    setState("listening-browser-asr");
+  };
+  recognition.onaudiostart = () => {
+    if (currentAudio) stopPlayback("interrupted");
+  };
+  recognition.onresult = (event) => {
+    const latest = event.results[event.results.length - 1];
+    if (!latest?.isFinal) return;
+    const text = latest[0]?.transcript?.trim();
+    if (text) sendTextTurn(text);
+  };
+  recognition.onerror = (event) => {
+    appendTurn("Error", `Browser ASR failed: ${event.error}`, true);
+    setState("idle");
+  };
+  recognition.onend = () => {
+    if (running && browserAsrMode) recognition.start();
+  };
+  recognition.start();
 }
 
 async function reset() {
@@ -145,6 +191,10 @@ async function submitAudio(samples) {
 async function submitText() {
   const text = textInput.value.trim();
   if (!text) return;
+  await sendTextTurn(text);
+}
+
+async function sendTextTurn(text) {
   stopPlayback("interrupted");
   textInput.value = "";
   setState("thinking");

@@ -11,6 +11,7 @@ describe("config", () => {
     });
     expect(config.llm.apiKey).toBe("sk-test");
     expect(getConfigStatus(config).ok).toBe(true);
+    expect(config.tts.localFallback).toBe(true);
   });
 
   it("reports missing external API variables outside mock mode", () => {

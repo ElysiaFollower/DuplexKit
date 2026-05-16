@@ -14,6 +14,8 @@ DEMO_MOCK=1 npm start
 
 打开 `http://localhost:5177`。mock 模式不调用外部 API，用来验证浏览器页面、后端接口和打断状态机。
 
+真实模式下，如果还没有 `VOLCENGINE_ASR_APP_KEY`，浏览器会在支持 Web Speech API 的环境里自动用浏览器 ASR 作为麦克风降级入口，然后继续调用后端 LLM + TTS。当前仓库还提供 macOS 本地 TTS fallback：火山 TTS key 不可用时，用 `say` + `afconvert` 生成 WAV。
+
 无人值守 smoke：
 
 ```sh

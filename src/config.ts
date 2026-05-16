@@ -30,7 +30,8 @@ const RawEnv = z.object({
   VOLCENGINE_TTS_RESOURCE_ID: z.string().default("seed-tts-2.0"),
   VOLCENGINE_TTS_SPEAKER: z.string().default("zh_female_shuangkuaisisi_moon_bigtts"),
   VOLCENGINE_TTS_FORMAT: z.enum(["mp3", "ogg_opus", "pcm"]).default("mp3"),
-  VOLCENGINE_TTS_SAMPLE_RATE: z.coerce.number().int().positive().default(24000)
+  VOLCENGINE_TTS_SAMPLE_RATE: z.coerce.number().int().positive().default(24000),
+  LOCAL_TTS_FALLBACK: z.string().default("1")
 });
 
 export type AppConfig = ReturnType<typeof loadConfig>;
@@ -67,7 +68,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       resourceId: parsed.VOLCENGINE_TTS_RESOURCE_ID,
       speaker: parsed.VOLCENGINE_TTS_SPEAKER,
       format: parsed.VOLCENGINE_TTS_FORMAT,
-      sampleRate: parsed.VOLCENGINE_TTS_SAMPLE_RATE
+      sampleRate: parsed.VOLCENGINE_TTS_SAMPLE_RATE,
+      localFallback: parsed.LOCAL_TTS_FALLBACK !== "0" && parsed.LOCAL_TTS_FALLBACK !== "false"
     }
   };
 }
@@ -97,6 +99,7 @@ export function getConfigStatus(config: AppConfig) {
       endpoint: config.tts.endpoint,
       resourceId: config.tts.resourceId,
       speaker: config.tts.speaker,
+      localFallback: config.tts.localFallback && process.platform === "darwin",
       configured: Boolean(config.tts.apiKey)
     }
   };
