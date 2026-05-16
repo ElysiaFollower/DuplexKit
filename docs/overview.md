@@ -37,3 +37,4 @@
 
 - 聚焦验证：`npm test`
 - 完整验证：`npm run build`
+- Mock 端到端 smoke：`npm run smoke:mock`

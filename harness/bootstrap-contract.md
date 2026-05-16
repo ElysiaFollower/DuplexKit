@@ -26,6 +26,7 @@ npm install
 npm run dev
 npm test
 npm run build
+npm run smoke:mock
 ```
 
 ## 初始化验收清单

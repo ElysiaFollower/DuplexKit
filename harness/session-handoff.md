@@ -15,9 +15,9 @@
 
 ## 当前已验证状态
 
-- 上次运行命令：`npm test`; `npm run build`; `DEMO_MOCK=1 PORT=5178 npm start` + curl/browser smoke
-- 结果：测试、构建、mock HTTP 和页面加载通过
-- 证据：F002 evidence 已写入 `harness/feature_list.json`；配置检查显示真实模式缺 `VOLCENGINE_ASR_APP_KEY`
+- 上次运行命令：`./scripts/harness-check.sh`; `npm test`; `npm run build`; `npm run smoke:mock`; `npm run config:check`
+- 结果：harness、测试、构建、mock HTTP smoke 和页面加载通过；真实模式配置检查缺 ASR key
+- 证据：F002 evidence 已写入 `harness/feature_list.json`；Browser 文本入口 smoke 通过；`npm run config:check` 显示真实模式缺 `VOLCENGINE_ASR_APP_KEY`
 
 ## 本会话改动
 
@@ -25,19 +25,19 @@
 - 创建并填写 repo-native harness scaffold。
 - 记录全双工语音 demo 的目标、范围、架构方向和 active plan。
 - 将 F001 标记为 passing，F002 标记为 active。
-- 创建 Fastify 后端、浏览器采集页、外部 API providers、mock providers、测试。
+- 创建 Fastify 后端、浏览器采集页、文本回合入口、外部 API providers、mock providers、测试和 smoke 脚本。
 - 补 README 和 API 集成文档。
 
 ## 仍损坏或未验证
 
-- 真实火山 ASR 未验证，因为当前 `.env` 缺 `VOLCENGINE_ASR_APP_KEY`。
+- 真实火山 ASR 未验证，因为当前 `.env` 缺 `VOLCENGINE_ASR_APP_KEY`；ASR 缺失时可以用 `/api/text-turn` 验证 LLM/TTS。
 - 真实火山 TTS 未验证；当前会尝试使用 `VOLCENGINE_API_KEY`，该 key 是否有 speech TTS 权限待确认。
 - 自动化未点击浏览器麦克风权限；需要用户本机手动授权后测试真实说话。
 
 ## 清洁状态
 
 - 构建/静态检查：`npm run build` 通过
-- 测试/端到端：`npm test` 通过；mock HTTP/browser smoke 通过；真实 API 待补 key
+- 测试/端到端：`npm test` 通过；`npm run smoke:mock` 通过；真实 API 待补 key
 - 进度文件同步：已同步到 feature_list、progress、handoff
 - 临时工件：无
 - 启动路径：harness 可检查，业务启动待实现

@@ -24,4 +24,28 @@ describe("DuplexService", () => {
     expect(result.reply).toBe("回复：你好");
     expect(result.audio.mimeType).toBe("audio/mpeg");
   });
+
+  it("runs text-only turns without ASR", async () => {
+    const asr: AsrProvider = {
+      transcribe: async () => {
+        throw new Error("ASR should not be called");
+      }
+    };
+    const llm: LlmProvider = { reply: async ({ transcript }) => `文本回复：${transcript}` };
+    const tts: TtsProvider = {
+      synthesize: async () => ({
+        audioBase64: Buffer.from("audio").toString("base64"),
+        mimeType: "audio/mpeg"
+      })
+    };
+    const service = new DuplexService({ asr, llm, tts });
+
+    const result = await service.handleTextTurn({
+      text: "直接文本",
+      sessionId: "s1"
+    });
+
+    expect(result.transcript).toBe("直接文本");
+    expect(result.reply).toBe("文本回复：直接文本");
+  });
 });

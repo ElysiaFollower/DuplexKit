@@ -47,4 +47,23 @@ describe("server", () => {
     expect(body.reply).toContain(body.transcript);
     expect(body.audio.mimeType).toBe("audio/wav");
   });
+
+  it("runs a mock text turn through the HTTP API", async () => {
+    const app = buildServer(loadConfig({ DEMO_MOCK: "1" }));
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/text-turn",
+      payload: {
+        sessionId: "test",
+        text: "测试文本入口"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.transcript).toBe("测试文本入口");
+    expect(body.reply).toContain("测试文本入口");
+  });
 });

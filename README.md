@@ -14,6 +14,12 @@ DEMO_MOCK=1 npm start
 
 打开 `http://localhost:5177`。mock 模式不调用外部 API，用来验证浏览器页面、后端接口和打断状态机。
 
+无人值守 smoke：
+
+```sh
+npm run smoke:mock
+```
+
 真实 API 模式：
 
 ```sh
@@ -50,6 +56,17 @@ npm run dev
   "sessionId": "local",
   "mimeType": "audio/wav",
   "audioBase64": "..."
+}
+```
+
+如果 ASR key 还没配好，可以先用文本入口验证 LLM/TTS 和播放链路：
+
+`POST /api/text-turn`
+
+```json
+{
+  "sessionId": "local",
+  "text": "你好，测试一下语音回复"
 }
 ```
 

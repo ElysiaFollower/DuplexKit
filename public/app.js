@@ -5,6 +5,8 @@ const stateEl = document.querySelector("#state");
 const levelEl = document.querySelector("#level");
 const logEl = document.querySelector("#log");
 const healthEl = document.querySelector("#health");
+const textInput = document.querySelector("#textInput");
+const sendTextBtn = document.querySelector("#sendTextBtn");
 
 const sessionId = crypto.randomUUID();
 let audioContext;
@@ -28,6 +30,10 @@ let speechMs = 0;
 startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
 resetBtn.addEventListener("click", reset);
+sendTextBtn.addEventListener("click", submitText);
+textInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") submitText();
+});
 
 checkHealth();
 
@@ -133,6 +139,33 @@ async function submitAudio(samples) {
   } catch (error) {
     appendTurn("Error", error.message, true);
     setState("listening");
+  }
+}
+
+async function submitText() {
+  const text = textInput.value.trim();
+  if (!text) return;
+  stopPlayback("interrupted");
+  textInput.value = "";
+  setState("thinking");
+  try {
+    const response = await fetch("/api/text-turn", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        clientTurnId: crypto.randomUUID(),
+        text
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
+    appendTurn("You", data.transcript);
+    appendTurn("Assistant", data.reply);
+    playAudio(data.audio.audioBase64, data.audio.mimeType);
+  } catch (error) {
+    appendTurn("Error", error.message, true);
+    setState(running ? "listening" : "idle");
   }
 }
 

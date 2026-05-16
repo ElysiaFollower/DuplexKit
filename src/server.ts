@@ -45,6 +45,15 @@ export function buildServer(config: AppConfig = loadConfig()) {
     }
   });
 
+  app.post("/api/text-turn", async (request, reply) => {
+    try {
+      return await service.handleTextTurn(request.body);
+    } catch (error) {
+      const payload = toErrorPayload(error, request.id);
+      return reply.status(payload.statusCode).send(payload.body);
+    }
+  });
+
   app.post("/api/session/:sessionId/reset", async (request) => {
     const { sessionId } = request.params as { sessionId: string };
     service.resetSession(sessionId);

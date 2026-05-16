@@ -19,10 +19,10 @@
       "priority": "P0",
       "area": "demo",
       "title": "浏览器到后端的全双工语音 demo",
-      "behavior": "浏览器采集麦克风、前端 VAD/WAV 分段、播放 TTS 并在用户再次说话时中断；后端提供 ASR/LLM/TTS 编排接口和 mock 完整链路。",
+      "behavior": "浏览器采集麦克风、前端 VAD/WAV 分段、播放 TTS 并在用户再次说话时中断；后端提供 ASR/LLM/TTS 编排、文本回合接口和 mock 完整链路。",
       "status": "passing",
-      "verification": "npm test && npm run build；DEMO_MOCK=1 npm start 后验证 /api/health、/api/turn 和浏览器页面加载。",
-      "evidence": "2026-05-17: npm test -> 4 files / 8 tests passed；npm run build -> pass；DEMO_MOCK=1 PORT=5178 npm start 后 /api/health、/api/turn、/ smoke 通过；Browser 页面显示 ready。",
+      "verification": "npm test && npm run build && npm run smoke:mock；DEMO_MOCK=1 npm start 后验证 /api/health、/api/turn、/api/text-turn 和浏览器页面加载。",
+      "evidence": "2026-05-17: npm test -> 4 files / 10 tests passed；npm run build -> pass；npm run smoke:mock -> pass；Browser 页面显示 ready；Browser 文本入口提交后显示 speaking 并播放 mock audio。",
       "notes": "真实火山 ASR/TTS smoke 单独由 F003 跟踪；首版追求效果可用，不追求模型级原生实时全双工。"
     },
     {
@@ -32,7 +32,7 @@
       "title": "真实火山语音 API smoke",
       "behavior": "使用真实火山 ASR/TTS 和真实 LLM 完成一次麦克风输入、文本回复、语音播放和播放打断。",
       "status": "blocked",
-      "verification": "补齐 VOLCENGINE_ASR_APP_KEY 后运行 npm run dev，并在浏览器完成一次真实语音回合。",
+      "verification": "补齐 VOLCENGINE_ASR_APP_KEY 后运行 npm run dev，并在浏览器完成一次真实语音回合；ASR 缺失时可用 /api/text-turn 先验证 LLM/TTS。",
       "evidence": "2026-05-17: 配置检查显示 DEEPSEEK_API_KEY 已配置，TTS 会尝试 VOLCENGINE_API_KEY，但缺 VOLCENGINE_ASR_APP_KEY。",
       "notes": "需要用户准备火山语音识别 app key；若 TTS 鉴权失败，再补 VOLCENGINE_TTS_API_KEY。"
     }
