@@ -52,3 +52,10 @@
 - 原因：火山没有公开通用 tool call 事件；官方 web_agent 不能调用我们的服务；external_rag 可作为稳定结果注入通道。
 - 否决方案：把官方 web_agent 当作可复用工具调用方案；让语音模型直接用自然文本/咒语承载底层工具参数。
 - 后续约束：工具参数由后端 Planner 生成并做 schema 校验；参数不足时 Planner 必须主动澄清，不猜测执行；咒语只作为交互层候选；demo 承认纯文本 Planner 不理解声色、韵律和声纹身份。
+
+### 2026-05-17 - 用户插话由 ASRInfo 立即停播并重规划
+
+- 决策：收到 `450 ASRInfo` 后前端立即停止当前播放并丢弃旧音频队列；用户说完后 Planner 决定 `continue_old`、`revise_response` 或 `new_task`，详见 `docs/adr/2026-05-17-interruption-and-replanning.md`。
+- 原因：`ASRInfo` 是最快的用户开口信号；打断播放不应等待 transcript、ASREnded 或 Planner。
+- 否决方案：暂停旧音频后继续播放；每个流式词都调用 Planner；等 Planner 决定后再停播。
+- 后续约束：旧音频被打断后不恢复播放，必须重新生成自然衔接语音；demo 阶段接受少量误停播，后续再加音量阈值和 transcript 校验。

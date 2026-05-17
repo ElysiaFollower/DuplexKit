@@ -36,6 +36,7 @@ Planner 输出动作类型：
 - `tool_call`：参数足够，执行工具。
 - `ask_clarification`：参数不足或置信度低，让语音模型向用户确认。
 - `no_action`：没有工具意图。
+- `continue_old` / `revise_response` / `new_task`：用户插话打断后的重规划动作，详见 `2026-05-17-interruption-and-replanning.md`。
 
 ## 身体反馈
 
