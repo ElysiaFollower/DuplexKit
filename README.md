@@ -75,3 +75,5 @@ npm run smoke:bridge
 ## API Reference
 
 - 火山引擎实时语音大模型：`WSS wss://openspeech.bytedance.com/api/v3/realtime/dialogue`，resource id `volc.speech.dialog`。
+- 实时语音大模型 API 文档：https://www.volcengine.com/docs/6561/1594356?lang=zh
+- 火山语音应用控制台：https://console.volcengine.com/speech/app

@@ -16,6 +16,11 @@
 
 本地后端只做 WebSocket 桥接和火山二进制协议封包/解析，不本地做 VAD、ASR、LLM、TTS 编排。
 
+## 关键链接
+
+- 实时语音大模型 API 文档：https://www.volcengine.com/docs/6561/1594356?lang=zh
+- 火山语音应用控制台：https://console.volcengine.com/speech/app
+
 ## 音频格式
 
 浏览器上行到后端：
