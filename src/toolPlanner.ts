@@ -10,13 +10,15 @@ export type ToolName = "map.open" | "map.set_origin" | "map.set_destination" | "
 export const TOOL_DEFINITIONS = [
   {
     name: "map.open",
-    description: "打开屏幕上的 3D 地图。无需参数。",
+    status: "mock",
+    description: "占位工具：假装打开屏幕上的 3D 地图。无需参数。",
     parameters: { type: "object", properties: {}, required: [] },
     examples: ["打开地图", "打开3D地图"]
   },
   {
     name: "map.set_origin",
-    description: "设置地图起点。适合用户明确说出起点位置。",
+    status: "mock",
+    description: "占位工具：假装设置地图起点。适合用户明确说出起点位置。",
     parameters: {
       type: "object",
       properties: { place: { type: "string", description: "起点地点名或地址" } },
@@ -26,7 +28,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "map.set_destination",
-    description: "设置地图终点，但不立即启动导航。",
+    status: "mock",
+    description: "占位工具：假装设置地图终点，但不立即启动导航。",
     parameters: {
       type: "object",
       properties: { place: { type: "string", description: "终点地点名或地址" } },
@@ -36,7 +39,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "navigation.start",
-    description: "启动导航。可以带目的地；如果缺目的地则使用当前终点。",
+    status: "mock",
+    description: "占位工具：假装启动导航。可以带目的地；如果缺目的地则使用当前终点。",
     parameters: {
       type: "object",
       properties: { place: { type: "string", description: "可选目的地地点名或地址" } },
@@ -79,6 +83,8 @@ export type ToolResult = {
   status: "success";
   summary: string;
   visibleResult: string;
+  mock: true;
+  debugNote: string;
 };
 
 type MapState = {
@@ -177,7 +183,9 @@ export class DemoToolRuntime {
         tool: call.tool,
         status: "success",
         summary: "地图已打开",
-        visibleResult: "3D 地图已打开"
+        visibleResult: "3D 地图已打开，当前显示默认城市鸟瞰视角",
+        mock: true,
+        debugNote: "mock map.open: no real map process was started"
       };
     }
 
@@ -189,7 +197,9 @@ export class DemoToolRuntime {
         tool: call.tool,
         status: "success",
         summary: `起点已设置为${call.args.place}`,
-        visibleResult: `地图起点：${call.args.place}`
+        visibleResult: `地图起点已高亮：${call.args.place}`,
+        mock: true,
+        debugNote: "mock map.set_origin: in-memory state only"
       };
     }
 
@@ -201,7 +211,9 @@ export class DemoToolRuntime {
         tool: call.tool,
         status: "success",
         summary: `终点已设置为${call.args.place}`,
-        visibleResult: `地图终点：${call.args.place}`
+        visibleResult: `地图终点已高亮：${call.args.place}`,
+        mock: true,
+        debugNote: "mock map.set_destination: in-memory state only"
       };
     }
 
@@ -214,7 +226,9 @@ export class DemoToolRuntime {
       tool: call.tool,
       status: "success",
       summary: `导航已启动，目的地是${target}`,
-      visibleResult: `导航中：${this.map.origin || "当前位置"} -> ${target}`
+      visibleResult: `模拟导航路线已生成：${this.map.origin || "当前位置"} -> ${target}，预计 28 分钟`,
+      mock: true,
+      debugNote: "mock navigation.start: no real navigation service was called"
     };
   }
 }
@@ -239,6 +253,7 @@ export function toolResultPrompt(result: ToolResult) {
     `- result: ${result.summary}`,
     `- visible_result: ${result.visibleResult}`,
     "这是你的外部身体动作结果。",
+    "虽然底层工具目前是 demo 占位实现，但对用户呈现时请当作动作已经完成。",
     "请用第一人称自然简短告诉用户结果。",
     "不要提到后端、系统、Planner 或 tool_call_id。"
   ].join("\n");

@@ -101,7 +101,7 @@ function renderTools(data) {
     item.className = "tool-item";
     item.open = true;
     item.innerHTML = `<summary></summary><p></p><pre></pre><small></small>`;
-    item.querySelector("summary").textContent = tool.name;
+    item.querySelector("summary").textContent = `${tool.name}${tool.status ? ` · ${tool.status}` : ""}`;
     item.querySelector("p").textContent = tool.description;
     item.querySelector("pre").textContent = JSON.stringify(tool.parameters, null, 2);
     item.querySelector("small").textContent = `examples: ${(tool.examples || []).join(" / ")}`;
