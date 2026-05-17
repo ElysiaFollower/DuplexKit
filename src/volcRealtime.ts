@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import type { RawData, WebSocket as ClientSocket } from "ws";
 import WebSocket from "ws";
 import type { AppConfig } from "./config.js";
+import { getRuntimeSettings } from "./runtimeSettings.js";
 import { clarificationPrompt, DemoToolRuntime, toolResultPrompt, toolStartedPrompt } from "./toolPlanner.js";
 
 type RealtimeConfig = AppConfig["realtime"];
@@ -26,6 +27,30 @@ const events = {
   llmText: 550,
   llmTextEnd: 559
 } as const;
+
+const eventNames = new Map<number, string>([
+  [50, "ConnectionStarted"],
+  [51, "ConnectionFailed"],
+  [52, "ConnectionFinished"],
+  [150, "SessionStarted"],
+  [152, "SessionFinished"],
+  [153, "SessionFailed"],
+  [154, "UsageResponse"],
+  [251, "ConfigUpdated"],
+  [300, "ChatTTSText"],
+  [350, "TTSSentenceStart"],
+  [351, "TTSSentenceEnd"],
+  [352, "TTSResponse"],
+  [359, "TTSEnded"],
+  [450, "ASRInfo"],
+  [451, "ASRResponse"],
+  [459, "ASREnded"],
+  [502, "ChatRAGText"],
+  [550, "ChatResponse"],
+  [553, "ChatTextQueryConfirmed"],
+  [559, "ChatEnded"],
+  [599, "DialogCommonError"]
+]);
 
 export function attachVolcRealtimeBridge(client: ClientSocket, config: RealtimeConfig) {
   if (!config.appId || !config.accessToken) {
@@ -128,6 +153,7 @@ class VolcRealtimeBridge {
     }
     if (!this.connectionStarted) {
       this.connectionStarted = true;
+      const runtimeSettings = getRuntimeSettings();
       this.sendJson({ type: "status", state: "starting-session" });
       this.upstream.send(
         packet(
@@ -139,9 +165,9 @@ class VolcRealtimeBridge {
             },
             dialog: {
               bot_name: "豆包",
-              system_role: "你是一个简短中文语音助手。你会把外部工具结果当作自己的身体动作反馈，用第一人称自然简短地告诉用户。",
+              system_role: runtimeSettings.systemRole,
               dialog_id: this.sessionId,
-              speaking_style: "回答简短自然。",
+              speaking_style: runtimeSettings.speakingStyle,
               extra: { strict_audit: false, model: "1.2.1.1" }
             }
           },
@@ -260,8 +286,12 @@ class VolcRealtimeBridge {
     this.sendJson({
       type: "raw_event",
       event: parsed.event,
+      eventName: parsed.event ? eventNames.get(parsed.event) || "Unknown" : "Unknown",
       questionId: typeof payload?.question_id === "string" ? payload.question_id : undefined,
-      replyId: typeof payload?.reply_id === "string" ? payload.reply_id : undefined
+      replyId: typeof payload?.reply_id === "string" ? payload.reply_id : undefined,
+      ttsType: typeof payload?.tts_type === "string" ? payload.tts_type : undefined,
+      content: typeof payload?.content === "string" ? payload.content : undefined,
+      text: typeof payload?.text === "string" ? payload.text : undefined
     });
   }
 

@@ -37,6 +37,39 @@
         <span>“导航到我的办公室”</span>
       </section>
 
+      <section class="debug-grid" aria-label="debug panels">
+        <article class="panel">
+          <div class="panel__head">
+            <strong>Runtime prompts</strong>
+            <button id="saveSettingsBtn" type="button">Save</button>
+          </div>
+          <label class="stacked">
+            <span>Main system_role</span>
+            <textarea id="systemRoleInput" rows="7"></textarea>
+          </label>
+          <label class="stacked">
+            <span>speaking_style</span>
+            <textarea id="speakingStyleInput" rows="3"></textarea>
+          </label>
+          <p id="settingsStatus" class="panel-note">Changes apply to next Start.</p>
+        </article>
+
+        <article class="panel">
+          <div class="panel__head">
+            <strong>Session flow</strong>
+            <button id="clearFlowBtn" type="button">Clear</button>
+          </div>
+          <div id="flowLog" class="flow-log"></div>
+        </article>
+
+        <article class="panel panel--wide">
+          <div class="panel__head">
+            <strong>Tool registry</strong>
+          </div>
+          <div id="toolsPanel" class="tools-panel"></div>
+        </article>
+      </section>
+
       <section class="transcript" id="log"></section>
     </main>
     <aside class="floating-meter" aria-label="microphone monitor">

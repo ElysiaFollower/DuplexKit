@@ -7,6 +7,63 @@ export type PlannerDecision =
 
 export type ToolName = "map.open" | "map.set_origin" | "map.set_destination" | "navigation.start";
 
+export const TOOL_DEFINITIONS = [
+  {
+    name: "map.open",
+    description: "打开屏幕上的 3D 地图。无需参数。",
+    parameters: { type: "object", properties: {}, required: [] },
+    examples: ["打开地图", "打开3D地图"]
+  },
+  {
+    name: "map.set_origin",
+    description: "设置地图起点。适合用户明确说出起点位置。",
+    parameters: {
+      type: "object",
+      properties: { place: { type: "string", description: "起点地点名或地址" } },
+      required: ["place"]
+    },
+    examples: ["设置起点中关村", "起点设为公司"]
+  },
+  {
+    name: "map.set_destination",
+    description: "设置地图终点，但不立即启动导航。",
+    parameters: {
+      type: "object",
+      properties: { place: { type: "string", description: "终点地点名或地址" } },
+      required: ["place"]
+    },
+    examples: ["设置终点北京南站", "终点设为机场"]
+  },
+  {
+    name: "navigation.start",
+    description: "启动导航。可以带目的地；如果缺目的地则使用当前终点。",
+    parameters: {
+      type: "object",
+      properties: { place: { type: "string", description: "可选目的地地点名或地址" } },
+      required: []
+    },
+    examples: ["导航到北京南站", "启动导航"]
+  }
+] as const;
+
+export const TOOL_PROMPT_TEMPLATES = [
+  {
+    name: "tool_started",
+    channel: "300 ChatTTSText",
+    purpose: "工具开始时的等待反馈。当前 demo 用它保证用户马上听到“我来处理”。"
+  },
+  {
+    name: "tool_result",
+    channel: "300 ChatTTSText in demo, target 502 ChatRAGText",
+    purpose: "工具结果反馈。目标路线是用 502 把身体动作结果注入语音模型；当前 demo 用 300 保证稳定可听。"
+  },
+  {
+    name: "ask_clarification",
+    channel: "300 ChatTTSText",
+    purpose: "参数不足时向用户追问，不猜测执行工具。"
+  }
+] as const;
+
 export type ToolCallState = {
   toolCallId: string;
   turnId: string;

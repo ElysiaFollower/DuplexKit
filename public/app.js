@@ -8,6 +8,13 @@ const healthEl = document.querySelector("#health");
 const modeHintEl = document.querySelector("#modeHint");
 const floatingLevelEl = document.querySelector("#floatingLevel");
 const floatingLevelTextEl = document.querySelector("#floatingLevelText");
+const systemRoleInput = document.querySelector("#systemRoleInput");
+const speakingStyleInput = document.querySelector("#speakingStyleInput");
+const settingsStatusEl = document.querySelector("#settingsStatus");
+const saveSettingsBtn = document.querySelector("#saveSettingsBtn");
+const flowLogEl = document.querySelector("#flowLog");
+const clearFlowBtn = document.querySelector("#clearFlowBtn");
+const toolsPanelEl = document.querySelector("#toolsPanel");
 
 let audioContext;
 let source;
@@ -25,8 +32,14 @@ const upstreamSampleRate = 24000;
 startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
 resetBtn.addEventListener("click", reset);
+saveSettingsBtn.addEventListener("click", saveRuntimeSettings);
+clearFlowBtn.addEventListener("click", () => {
+  flowLogEl.innerHTML = "";
+});
 
 checkHealth();
+loadRuntimeSettings();
+loadToolRegistry();
 
 async function checkHealth() {
   try {
@@ -37,6 +50,73 @@ async function checkHealth() {
   } catch (error) {
     healthEl.textContent = `health failed: ${error.message}`;
   }
+}
+
+async function loadRuntimeSettings() {
+  try {
+    const response = await fetch("/api/runtime-settings");
+    const data = await response.json();
+    systemRoleInput.value = data.settings?.systemRole || "";
+    speakingStyleInput.value = data.settings?.speakingStyle || "";
+    settingsStatusEl.textContent = data.note || "Changes apply to next Start.";
+  } catch (error) {
+    settingsStatusEl.textContent = `settings failed: ${error.message}`;
+  }
+}
+
+async function saveRuntimeSettings() {
+  settingsStatusEl.textContent = "saving";
+  const response = await fetch("/api/runtime-settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      systemRole: systemRoleInput.value,
+      speakingStyle: speakingStyleInput.value
+    })
+  });
+  if (!response.ok) {
+    settingsStatusEl.textContent = `save failed: ${response.status}`;
+    return;
+  }
+  const data = await response.json();
+  systemRoleInput.value = data.settings.systemRole;
+  speakingStyleInput.value = data.settings.speakingStyle;
+  settingsStatusEl.textContent = "saved; next Start uses it";
+}
+
+async function loadToolRegistry() {
+  try {
+    const response = await fetch("/api/tools");
+    const data = await response.json();
+    renderTools(data);
+  } catch (error) {
+    toolsPanelEl.textContent = `tools failed: ${error.message}`;
+  }
+}
+
+function renderTools(data) {
+  toolsPanelEl.innerHTML = "";
+  for (const tool of data.tools || []) {
+    const item = document.createElement("details");
+    item.className = "tool-item";
+    item.open = true;
+    item.innerHTML = `<summary></summary><p></p><pre></pre><small></small>`;
+    item.querySelector("summary").textContent = tool.name;
+    item.querySelector("p").textContent = tool.description;
+    item.querySelector("pre").textContent = JSON.stringify(tool.parameters, null, 2);
+    item.querySelector("small").textContent = `examples: ${(tool.examples || []).join(" / ")}`;
+    toolsPanelEl.appendChild(item);
+  }
+
+  const prompts = document.createElement("section");
+  prompts.className = "prompt-list";
+  prompts.innerHTML = "<strong>Prompt channels</strong>";
+  for (const template of data.promptTemplates || []) {
+    const row = document.createElement("p");
+    row.textContent = `${template.name} · ${template.channel} · ${template.purpose}`;
+    prompts.appendChild(row);
+  }
+  toolsPanelEl.appendChild(prompts);
 }
 
 async function start() {
@@ -78,8 +158,9 @@ function connectRealtime() {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     socket = new WebSocket(`${protocol}//${location.host}/api/realtime`);
     socket.binaryType = "arraybuffer";
-    socket.addEventListener("open", () => {
+  socket.addEventListener("open", () => {
       modeHintEl.textContent = "Native realtime connected. Speak naturally.";
+      addFlow("socket", "open");
       setState("connected");
       resolve();
     });
@@ -169,23 +250,55 @@ async function handleRealtimeMessage(event) {
   if (message.type === "asr_start") {
     clearPlayback();
     appendTurn("Interrupt", "user speech detected; cleared queued playback");
+    addFlow("interrupt", { questionId: message.questionId });
     setState("listening");
   }
-  if (message.type === "transcript") updateYou(message.text);
-  if (message.type === "asr_end") setState("thinking");
+  if (message.type === "transcript") {
+    updateYou(message.text);
+    addFlow("transcript", { text: message.text, questionId: message.questionId });
+  }
+  if (message.type === "asr_end") {
+    addFlow("asr_end", { questionId: message.questionId });
+    setState("thinking");
+  }
   if (message.type === "tts_start") {
     if (message.suppressed) {
       appendTurn("Realtime", `suppressed ${message.ttsType || "default"} reply`);
+      addFlow("tts_suppressed", message);
       return;
     }
+    addFlow("tts_start", message);
     setState("speaking");
     ensureAssistant();
   }
-  if (message.type === "assistant_text") updateAssistant(message.text);
+  if (message.type === "assistant_text") {
+    updateAssistant(message.text);
+    addFlow("assistant_text", { text: message.text });
+  }
   if (message.type === "tts_end" || message.type === "llm_end") setState("listening");
-  if (message.type === "planner") appendTurn("Planner", JSON.stringify(message.decision));
-  if (message.type === "tool") appendTurn("Tool", JSON.stringify(message));
-  if (message.type === "raw_event") console.debug("realtime event", message);
+  if (message.type === "planner") {
+    appendTurn("Planner", JSON.stringify(message.decision));
+    addFlow("planner", { transcript: message.transcript, decision: message.decision });
+  }
+  if (message.type === "tool") {
+    appendTurn("Tool", JSON.stringify(message));
+    addFlow("tool", message);
+  }
+  if (message.type === "raw_event") {
+    addFlow("volc", message);
+    console.debug("realtime event", message);
+  }
+}
+
+function addFlow(kind, payload) {
+  const item = document.createElement("div");
+  item.className = "flow-item";
+  const time = new Date().toLocaleTimeString();
+  item.innerHTML = `<strong></strong><pre></pre>`;
+  item.querySelector("strong").textContent = `${time} ${kind}`;
+  item.querySelector("pre").textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+  flowLogEl.prepend(item);
+  while (flowLogEl.children.length > 120) flowLogEl.lastElementChild?.remove();
 }
 
 function playPcm(arrayBuffer) {

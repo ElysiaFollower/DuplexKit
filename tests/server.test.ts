@@ -46,4 +46,33 @@ describe("server", () => {
     expect(turn.statusCode).toBe(404);
     expect(textTurn.statusCode).toBe(404);
   });
+
+  it("serves and updates runtime prompt settings", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
+    apps.push(app);
+
+    const before = await app.inject({ method: "GET", url: "/api/runtime-settings" });
+    expect(before.statusCode).toBe(200);
+    expect(before.json().settings.systemRole).toContain("中文语音助手");
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/runtime-settings",
+      payload: { systemRole: "你是测试助手。", speakingStyle: "短句。" }
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().settings.systemRole).toBe("你是测试助手。");
+    expect(updated.json().settings.speakingStyle).toBe("短句。");
+  });
+
+  it("serves tool registry metadata", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/tools" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().tools.map((tool: { name: string }) => tool.name)).toContain("map.open");
+    expect(response.json().promptTemplates.length).toBeGreaterThan(0);
+  });
 });

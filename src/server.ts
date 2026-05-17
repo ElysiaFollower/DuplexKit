@@ -3,6 +3,8 @@ import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
 import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
+import { getRuntimeSettings, updateRuntimeSettings } from "./runtimeSettings.js";
+import { TOOL_DEFINITIONS, TOOL_PROMPT_TEMPLATES } from "./toolPlanner.js";
 import { attachVolcRealtimeBridge } from "./volcRealtime.js";
 
 export function buildServer(config: AppConfig = loadConfig()) {
@@ -33,6 +35,20 @@ export function buildServer(config: AppConfig = loadConfig()) {
   app.get("/api/health", async () => ({
     status: "ok",
     config: getConfigStatus(config)
+  }));
+
+  app.get("/api/runtime-settings", async () => ({
+    settings: getRuntimeSettings(),
+    note: "Main realtime system_role/speaking_style. Changes apply to the next realtime session."
+  }));
+
+  app.put("/api/runtime-settings", async (request) => ({
+    settings: updateRuntimeSettings(request.body)
+  }));
+
+  app.get("/api/tools", async () => ({
+    tools: TOOL_DEFINITIONS,
+    promptTemplates: TOOL_PROMPT_TEMPLATES
   }));
 
   return app;
