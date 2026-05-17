@@ -5,8 +5,6 @@ const stateEl = document.querySelector("#state");
 const levelEl = document.querySelector("#level");
 const logEl = document.querySelector("#log");
 const healthEl = document.querySelector("#health");
-const textInput = document.querySelector("#textInput");
-const sendTextBtn = document.querySelector("#sendTextBtn");
 const modeHintEl = document.querySelector("#modeHint");
 const floatingLevelEl = document.querySelector("#floatingLevel");
 const floatingLevelTextEl = document.querySelector("#floatingLevelText");
@@ -16,24 +14,23 @@ let audioContext;
 let source;
 let processor;
 let mediaStream;
-let monitorContext;
-let monitorSource;
-let monitorProcessor;
-let monitorStream;
-let recognition;
 let running = false;
 let speaking = false;
 let segment = [];
 let preRoll = [];
 let silenceMs = 0;
 let currentAudio = null;
-let browserAsrMode = false;
-let healthMissingAsr = false;
-let preferBrowserAsr = false;
+let calibrated = false;
+let noiseSamples = [];
+let noiseFloor = 0;
+let activeThreshold = 0.018;
+let hotMs = 0;
 
 const sampleRate = 16000;
 const frameMs = 2048 / 48000 * 1000;
 const vadThreshold = 0.018;
+const calibrationMs = 1200;
+const speechStartMs = 180;
 const silenceToSubmitMs = 850;
 const minSpeechMs = 280;
 let speechMs = 0;
@@ -41,10 +38,6 @@ let speechMs = 0;
 startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
 resetBtn.addEventListener("click", reset);
-sendTextBtn.addEventListener("click", submitText);
-textInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") submitText();
-});
 
 checkHealth();
 
@@ -53,14 +46,7 @@ async function checkHealth() {
     const response = await fetch("/api/health");
     const data = await response.json();
     const missing = data.config?.missing || [];
-    healthMissingAsr = missing.includes("VOLCENGINE_ASR_APP_KEY");
-    preferBrowserAsr = Boolean(data.config?.client?.preferBrowserAsr);
-    const browserAsrAvailable = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-    healthEl.textContent = missing.length
-      ? `missing: ${missing.join(", ")}${healthMissingAsr && browserAsrAvailable ? "; browser ASR fallback available" : ""}`
-      : browserAsrAvailable && preferBrowserAsr
-        ? "ready; browser ASR preferred"
-        : "ready";
+    healthEl.textContent = missing.length ? `missing: ${missing.join(", ")}` : "ready; Web Audio VAD";
   } catch (error) {
     healthEl.textContent = `health failed: ${error.message}`;
   }
@@ -70,13 +56,6 @@ async function start() {
   setState("starting");
   startBtn.disabled = true;
   stopBtn.disabled = false;
-  await startMicMonitor().catch((error) => {
-    modeHintEl.textContent = `Mic monitor unavailable: ${error.message || error}`;
-  });
-  if ((preferBrowserAsr || healthMissingAsr) && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
-    startBrowserAsr();
-    return;
-  }
   await startAudioVad().catch((error) => showStartError(error));
 }
 
@@ -92,8 +71,13 @@ async function startAudioVad() {
   source.connect(processor);
   processor.connect(audioContext.destination);
   running = true;
-  modeHintEl.textContent = "Mic VAD mode: the meter should move when audio is captured. Speak, then pause for upload.";
-  setState("listening");
+  calibrated = false;
+  noiseSamples = [];
+  noiseFloor = 0;
+  activeThreshold = vadThreshold;
+  hotMs = 0;
+  modeHintEl.textContent = "Calibrating room noise. Stay quiet for about 1 second.";
+  setState("calibrating-noise");
 }
 
 function showStartError(error) {
@@ -106,98 +90,27 @@ function showStartError(error) {
 
 function stop() {
   running = false;
-  recognition?.stop();
-  recognition = null;
-  browserAsrMode = false;
   processor?.disconnect();
   source?.disconnect();
   mediaStream?.getTracks().forEach((track) => track.stop());
-  stopMicMonitor();
+  processor = null;
+  source = null;
+  mediaStream = null;
+  audioContext?.close().catch(() => {});
+  audioContext = null;
   modeHintEl.textContent = "";
   stopPlayback("stopped");
   resetBuffers();
+  resetFloatingMeter();
   startBtn.disabled = false;
   stopBtn.disabled = true;
   setState("idle");
 }
 
-async function startMicMonitor() {
-  if (monitorContext) return;
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("getUserMedia is unavailable");
-  }
-  monitorStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  });
-  monitorContext = new AudioContext();
-  monitorSource = monitorContext.createMediaStreamSource(monitorStream);
-  monitorProcessor = monitorContext.createScriptProcessor(1024, 1, 1);
-  monitorProcessor.onaudioprocess = (event) => {
-    const input = event.inputBuffer.getChannelData(0);
-    const rms = Math.sqrt(input.reduce((sum, value) => sum + value * value, 0) / input.length);
-    const percent = Math.min(100, Math.round(rms * 520));
-    floatingLevelEl.style.width = `${percent}%`;
-    floatingLevelEl.classList.toggle("hot", percent > 70);
-    floatingLevelTextEl.textContent = `${percent}%`;
-  };
-  monitorSource.connect(monitorProcessor);
-  monitorProcessor.connect(monitorContext.destination);
-}
-
-function stopMicMonitor() {
-  monitorProcessor?.disconnect();
-  monitorSource?.disconnect();
-  monitorStream?.getTracks().forEach((track) => track.stop());
-  monitorProcessor = null;
-  monitorSource = null;
-  monitorStream = null;
-  monitorContext?.close().catch(() => {});
-  monitorContext = null;
+function resetFloatingMeter() {
   floatingLevelEl.style.width = "0%";
   floatingLevelEl.classList.remove("hot");
   floatingLevelTextEl.textContent = "0%";
-}
-
-function startBrowserAsr() {
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) {
-    startAudioVad().catch((error) => showStartError(error));
-    return;
-  }
-  recognition = new Recognition();
-  recognition.lang = "zh-CN";
-  recognition.continuous = true;
-  recognition.interimResults = false;
-  recognition.onstart = () => {
-    running = true;
-    browserAsrMode = true;
-    modeHintEl.textContent = "Browser ASR mode: speak a full sentence, then pause. The mic meter does not move in this mode.";
-    setState("listening-browser-asr");
-  };
-  recognition.onaudiostart = () => {
-    setState("hearing-browser-asr");
-    if (currentAudio) stopPlayback("interrupted");
-  };
-  recognition.onresult = (event) => {
-    const latest = event.results[event.results.length - 1];
-    if (!latest?.isFinal) return;
-    const text = latest[0]?.transcript?.trim();
-    if (text) sendTextTurn(text);
-  };
-  recognition.onerror = (event) => {
-    appendTurn("Browser ASR", `failed: ${event.error}; falling back to mic VAD upload`, true);
-    recognition = null;
-    browserAsrMode = false;
-    startAudioVad().catch((error) => showStartError(error));
-  };
-  recognition.onend = () => {
-    if (running && browserAsrMode) recognition.start();
-  };
-  recognition.start();
 }
 
 async function reset() {
@@ -209,26 +122,42 @@ function onAudio(event) {
   if (!running) return;
   const input = event.inputBuffer.getChannelData(0);
   const rms = Math.sqrt(input.reduce((sum, value) => sum + value * value, 0) / input.length);
-  levelEl.value = Math.min(1, rms * 18);
+  updateMeters(rms);
+
+  if (!calibrated) {
+    noiseSamples.push(rms);
+    if (noiseSamples.length * frameMs >= calibrationMs) {
+      const sorted = [...noiseSamples].sort((a, b) => a - b);
+      noiseFloor = sorted[Math.floor(sorted.length * 0.7)] || 0;
+      activeThreshold = Math.max(vadThreshold, noiseFloor * 3);
+      calibrated = true;
+      modeHintEl.textContent = `Web Audio VAD: threshold ${(activeThreshold * 100).toFixed(1)}%, noise floor ${(noiseFloor * 100).toFixed(1)}%. Speak, then pause.`;
+      setState("listening");
+    }
+    return;
+  }
+
   const downsampled = downsample(input, audioContext.sampleRate, sampleRate);
 
   preRoll.push(downsampled);
   if (preRoll.length > 8) preRoll.shift();
 
-  if (rms > vadThreshold) {
-    if (currentAudio) stopPlayback("interrupted");
-    if (!speaking) {
+  if (rms > activeThreshold) {
+    hotMs += frameMs;
+    if (currentAudio && hotMs >= speechStartMs) stopPlayback("interrupted");
+    if (!speaking && hotMs >= speechStartMs) {
       speaking = true;
       segment = [...preRoll];
       speechMs = 0;
       setState("recording");
     }
-    segment.push(downsampled);
+    if (speaking) segment.push(downsampled);
     silenceMs = 0;
-    speechMs += frameMs;
+    if (speaking) speechMs += frameMs;
     return;
   }
 
+  hotMs = 0;
   if (speaking) {
     segment.push(downsampled);
     silenceMs += frameMs;
@@ -239,6 +168,14 @@ function onAudio(event) {
       if (longEnough) submitAudio(captured);
     }
   }
+}
+
+function updateMeters(rms) {
+  const percent = Math.min(100, Math.round(rms * 520));
+  levelEl.value = percent / 100;
+  floatingLevelEl.style.width = `${percent}%`;
+  floatingLevelEl.classList.toggle("hot", percent > 70);
+  floatingLevelTextEl.textContent = `${percent}%`;
 }
 
 async function submitAudio(samples) {
@@ -265,37 +202,6 @@ async function submitAudio(samples) {
   } catch (error) {
     appendTurn("Error", error.message, true);
     setState("listening");
-  }
-}
-
-async function submitText() {
-  const text = textInput.value.trim();
-  if (!text) return;
-  await sendTextTurn(text);
-}
-
-async function sendTextTurn(text) {
-  stopPlayback("interrupted");
-  textInput.value = "";
-  setState("thinking");
-  try {
-    const response = await fetch("/api/text-turn", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId,
-        clientTurnId: crypto.randomUUID(),
-        text
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
-    appendTurn("You", data.transcript);
-    appendTurn("Assistant", data.reply);
-    playAudio(data.audio.audioBase64, data.audio.mimeType);
-  } catch (error) {
-    appendTurn("Error", error.message, true);
-    setState(running ? "listening" : "idle");
   }
 }
 
@@ -328,6 +234,7 @@ function resetBuffers() {
   segment = [];
   silenceMs = 0;
   speechMs = 0;
+  hotMs = 0;
 }
 
 function setState(value) {

@@ -11,7 +11,7 @@
 - 提交：`6861bd1 feat: scaffold duplex voice demo service` 后仍有未提交运行路径/README/test 更新
 - 脏文件：README、docs、src、tests、tsconfig、harness 状态更新
 - 当前计划：`plans/active/2026-05-17-duplex-demo.md`
-- 当前功能项：F003 blocked，等待 `volc.bigasr.auc_turbo` flash ASR 资源授权；demo 使用浏览器 ASR + 火山 TTS 可用
+- 当前功能项：F003 blocked，等待 `volc.bigasr.auc_turbo` flash ASR 资源授权；主 demo 已统一为 Web Audio VAD -> /api/turn
 
 ## 当前已验证状态
 
@@ -25,7 +25,7 @@
 - 创建并填写 repo-native harness scaffold。
 - 记录全双工语音 demo 的目标、范围、架构方向和 active plan。
 - 将 F001 标记为 passing，F002 标记为 active。
-- 创建 Fastify 后端、浏览器采集页、浏览器 ASR 降级、文本回合入口、外部 API providers、macOS TTS fallback、mock providers、测试和 smoke 脚本。
+- 创建 Fastify 后端、浏览器采集页、单一 Web Audio VAD pipeline、文本调试入口、外部 API providers、macOS TTS fallback、mock providers、测试和 smoke 脚本。
 - 补 README 和 API 集成文档。
 
 ## 仍损坏或未验证
@@ -45,7 +45,7 @@
 ## 下一步最佳动作
 
 1. 提交 APP_ID/ACCESS_TOKEN 适配、TTS 2.0 音色修复和状态更新。
-2. 当前可运行 `npm run dev`，打开 `http://localhost:5177`；默认 `PREFER_BROWSER_ASR=1`，浏览器 ASR + 后端 DeepSeek + 火山 TTS。
+2. 当前可运行 `npm run dev`，打开 `http://localhost:5177`；主路线固定为 Web Audio VAD -> /api/turn -> ASR/LLM/TTS。
 3. 若要纯后端 ASR，开通 `volc.bigasr.auc_turbo` 对应极速/flash 识别资源，或新增 Doubao-录音文件识别2.0异步 submit/query provider。
 
 ## 命令

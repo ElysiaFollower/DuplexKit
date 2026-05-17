@@ -14,14 +14,7 @@ DEMO_MOCK=1 npm start
 
 打开 `http://localhost:5177`。mock 模式不调用外部 API，用来验证浏览器页面、后端接口和打断状态机。
 
-真实模式下，如果还没有 `VOLCENGINE_ASR_APP_KEY`，浏览器会在支持 Web Speech API 的环境里自动用浏览器 ASR 作为麦克风降级入口，然后继续调用后端 LLM + TTS。当前仓库还提供 macOS 本地 TTS fallback：火山 TTS key 不可用时，用 `say` + `afconvert` 生成 WAV。
-
-当前默认 `PREFER_BROWSER_ASR=1`，也就是优先浏览器 ASR。原因是已开通的 “Doubao-录音文件识别2.0” 不是本 demo 后端同步 `/api/turn` 使用的 `volc.bigasr.auc_turbo` flash 资源。要测试纯后端 ASR，先开通对应 flash/极速版资源，再设：
-
-```env
-PREFER_BROWSER_ASR=0
-VOLCENGINE_ASR_RESOURCE_ID=volc.bigasr.auc_turbo
-```
+真实模式只有一条语音路线：Web Audio 采集麦克风，前端 VAD 分段，上传 `/api/turn`，后端执行 ASR -> LLM -> TTS。当前已开通的 “Doubao-录音文件识别2.0” 不是 `/api/turn` 使用的同步 flash 资源 `volc.bigasr.auc_turbo`，所以语音链路会在 ASR 阶段 blocked。先调这个点。
 
 无人值守 smoke：
 
@@ -70,7 +63,7 @@ npm run dev
 }
 ```
 
-如果 ASR key 还没配好，可以先用文本入口验证 LLM/TTS 和播放链路：
+内部调试可用文本入口验证 LLM/TTS 和播放链路；前端主 demo 不走这条路线：
 
 `POST /api/text-turn`
 

@@ -7,9 +7,9 @@
 
 首版采用浏览器 + Node.js 后端的单进程原型。
 
-- 浏览器：使用 Web Audio/VAD 分段采集用户语音，用 `<audio>` 播放 TTS；检测到用户再次开口时停止当前播放。缺火山 ASR key 时，支持 Web Speech API 的浏览器可降级为浏览器 ASR。
-- 后端：暴露静态页面、`/api/turn` 和 `/api/text-turn` 接口。`/api/turn` 接收音频片段并编排 ASR、LLM、TTS；`/api/text-turn` 跳过 ASR，用于 ASR 缺失时验证 LLM/TTS。
+- 浏览器：使用 Web Audio/VAD 分段采集用户语音，用同一音频流驱动音量条、开口检测、打断检测和 WAV 上传。播放 TTS 时继续监听；检测到用户再次开口就停止当前播放。
+- 后端：暴露静态页面、`/api/turn` 和调试用 `/api/text-turn`。主路线只用 `/api/turn`：接收音频片段并编排 ASR、LLM、TTS。
 - ASR/TTS：优先使用火山引擎 API；缺火山 TTS 权限时，macOS 本地可用 `say` + `afconvert` 作为 demo fallback。
 - LLM：使用模型中转站的 OpenAI-compatible Chat Completions API。
 
-这不是 Moshi/SeedDuplex 式的原生流式全双工模型。首版的“全双工效果”来自持续监听、分段提交、并发任务取消和播放打断。
+这不是 Moshi/SeedDuplex 式的原生流式全双工模型。首版的“全双工效果”来自单一 Web Audio VAD pipeline：持续监听、噪音校准、分段提交和播放打断。

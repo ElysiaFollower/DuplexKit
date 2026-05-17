@@ -30,11 +30,11 @@
 
 ### 2026-05-17 - Demo 服务骨架与 mock 链路
 
-- 创建 Node/TypeScript/Fastify 后端、OpenAI-compatible LLM 客户端、火山 ASR/TTS 客户端、浏览器 Web Audio VAD/WAV 采集页面、浏览器 ASR 降级、文本回合降级入口和 macOS TTS fallback。
+- 创建 Node/TypeScript/Fastify 后端、OpenAI-compatible LLM 客户端、火山 ASR/TTS 客户端、浏览器 Web Audio VAD/WAV 采集页面、调试文本回合入口和 macOS TTS fallback。
 - 从 DreamingRAG `.env` 复制本地 `.env`，不提交密钥。
 - 发现真实模式仍缺 `VOLCENGINE_ASR_APP_KEY`；已有 `DEEPSEEK_API_KEY`，TTS 会尝试使用 `VOLCENGINE_API_KEY`。
 - 发现 `VOLCENGINE_API_KEY` 调火山 TTS SSE 返回 `Invalid X-Api-Key`，因此补 macOS TTS fallback。
 - 用户随后创建火山语音应用并在 `.env` 填入 `APP_ID`、`ACCESS_TOKEN`、`SECRET_KEY`；代码已自动映射旧版 app-token 鉴权。
 - TTS 2.0 需要 `zh_female_xiaohe_uranus_bigtts` 这类 `uranus` 音色；原 `moon` 音色会触发资源不匹配。
 - 验证：`npm test` 通过，5 files / 12 tests；`npm run build` 通过；`npm run smoke:mock` 通过；`npm run config:check` 通过；真实 `/api/text-turn` 走 DeepSeek LLM + 火山 TTS 返回 audio/mpeg。
-- 纯后端 ASR 仍 blocked：`/api/turn` 返回 ASR 403 code 45000030，`volc.bigasr.auc_turbo` 未授权。当前浏览器 demo 默认 `PREFER_BROWSER_ASR=1`，用浏览器 ASR + 后端 LLM/TTS 跑效果全双工。
+- 纯后端 ASR 仍 blocked：`/api/turn` 返回 ASR 403 code 45000030，`volc.bigasr.auc_turbo` 未授权。已砍掉浏览器 ASR fallback，当前只保留 Web Audio VAD -> /api/turn 单一路线。

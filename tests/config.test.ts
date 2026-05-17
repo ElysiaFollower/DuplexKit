@@ -12,7 +12,6 @@ describe("config", () => {
     expect(config.llm.apiKey).toBe("sk-test");
     expect(getConfigStatus(config).ok).toBe(true);
     expect(config.tts.localFallback).toBe(true);
-    expect(config.preferBrowserAsr).toBe(true);
   });
 
   it("maps old Volcengine APP_ID and ACCESS_TOKEN into ASR/TTS auth", () => {
@@ -26,7 +25,6 @@ describe("config", () => {
     expect(status.ok).toBe(true);
     expect(status.asr.authMode).toBe("app-token");
     expect(status.tts.authMode).toBe("app-token");
-    expect(status.client.preferBrowserAsr).toBe(true);
     expect(config.asr.appKey).toBe("app-id");
     expect(config.tts.appId).toBe("app-id");
     expect(config.tts.accessKey).toBe("token");

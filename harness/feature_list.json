@@ -19,7 +19,7 @@
       "priority": "P0",
       "area": "demo",
       "title": "浏览器到后端的全双工语音 demo",
-      "behavior": "浏览器采集麦克风、前端 VAD/WAV 分段或浏览器 ASR 降级、播放 TTS 并在用户再次说话时中断；后端提供 ASR/LLM/TTS 编排、文本回合接口、本地 TTS fallback 和 mock 完整链路。",
+      "behavior": "浏览器采集麦克风，单一 Web Audio VAD/WAV pipeline 判断开口、打断和分段上传；后端提供 ASR/LLM/TTS 编排、调试文本回合接口、本地 TTS fallback 和 mock 完整链路。",
       "status": "passing",
       "verification": "npm test && npm run build && npm run smoke:mock；DEMO_MOCK=1 npm start 后验证 /api/health、/api/turn、/api/text-turn 和浏览器页面加载。",
       "evidence": "2026-05-17: npm test -> 5 files / 12 tests passed；npm run build -> pass；npm run smoke:mock -> pass；npm run config:check -> ok；Browser 页面显示 ready；真实 /api/text-turn 使用 DeepSeek LLM + 火山 TTS 返回 audio/mpeg 24621 bytes。",
@@ -34,7 +34,7 @@
       "status": "blocked",
       "verification": "开通与 VOLCENGINE_ASR_RESOURCE_ID=volc.bigasr.auc_turbo 匹配的极速/flash 识别资源后，运行 LOCAL_TTS_FALLBACK=0 npm start，并 POST WAV 到 /api/turn。",
       "evidence": "2026-05-17: APP_ID + ACCESS_TOKEN 鉴权可达 ASR；/api/turn 返回 ASR 403 code 45000030: [resource_id=volc.bigasr.auc_turbo] requested resource not granted。真实 /api/text-turn 已证明 DeepSeek LLM + 火山 TTS 可用。",
-      "notes": "用户已开通 Doubao-录音文件识别2.0，但当前 /api/turn 使用同步 flash 资源 volc.bigasr.auc_turbo；demo 目前默认 PREFER_BROWSER_ASR=1，用浏览器 ASR + 后端 LLM/TTS 实现效果全双工。"
+      "notes": "用户已开通 Doubao-录音文件识别2.0，但当前 /api/turn 使用同步 flash 资源 volc.bigasr.auc_turbo；当前单一路线 blocked 在 ASR resource grant。"
     }
   ]
 }

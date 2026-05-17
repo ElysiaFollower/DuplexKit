@@ -5,7 +5,6 @@ const RawEnv = z.object({
   PORT: z.coerce.number().int().positive().default(5177),
   PUBLIC_ORIGIN: z.string().default("http://localhost:5177"),
   DEMO_MOCK: z.string().optional(),
-  PREFER_BROWSER_ASR: z.string().default("1"),
 
   LLM_API_KEY: z.string().optional(),
   LLM_BASE_URL: z.string().optional(),
@@ -60,7 +59,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     port: parsed.PORT,
     publicOrigin: parsed.PUBLIC_ORIGIN,
     demoMock: parsed.DEMO_MOCK === "1" || parsed.DEMO_MOCK === "true",
-    preferBrowserAsr: parsed.PREFER_BROWSER_ASR !== "0" && parsed.PREFER_BROWSER_ASR !== "false",
     llm: {
       apiKey: llmApiKey,
       baseUrl: llmBaseUrl,
@@ -84,9 +82,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       format: parsed.VOLCENGINE_TTS_FORMAT,
       sampleRate: parsed.VOLCENGINE_TTS_SAMPLE_RATE,
       localFallback: parsed.LOCAL_TTS_FALLBACK !== "0" && parsed.LOCAL_TTS_FALLBACK !== "false"
-    },
-    client: {
-      preferBrowserAsr: parsed.PREFER_BROWSER_ASR !== "0" && parsed.PREFER_BROWSER_ASR !== "false"
     }
   };
 }
@@ -122,9 +117,6 @@ export function getConfigStatus(config: AppConfig) {
       localFallback: config.tts.localFallback && process.platform === "darwin",
       authMode: config.tts.apiKey ? "api-key" : config.tts.appId && config.tts.accessKey ? "app-token" : "missing",
       configured: Boolean(config.tts.apiKey || (config.tts.appId && config.tts.accessKey))
-    },
-    client: {
-      preferBrowserAsr: config.client.preferBrowserAsr
     }
   };
 }
