@@ -7,6 +7,7 @@ const logEl = document.querySelector("#log");
 const healthEl = document.querySelector("#health");
 const textInput = document.querySelector("#textInput");
 const sendTextBtn = document.querySelector("#sendTextBtn");
+const modeHintEl = document.querySelector("#modeHint");
 
 const sessionId = crypto.randomUUID();
 let audioContext;
@@ -60,9 +61,19 @@ async function checkHealth() {
 }
 
 async function start() {
+  setState("starting");
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
   if ((preferBrowserAsr || healthMissingAsr) && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
     startBrowserAsr();
     return;
+  }
+  await startAudioVad().catch((error) => showStartError(error));
+}
+
+async function startAudioVad() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("This browser does not expose microphone capture. Try Chrome/Safari outside the in-app browser.");
   }
   mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   audioContext = new AudioContext();
@@ -72,9 +83,16 @@ async function start() {
   source.connect(processor);
   processor.connect(audioContext.destination);
   running = true;
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
+  modeHintEl.textContent = "Mic VAD mode: the meter should move when audio is captured. Speak, then pause for upload.";
   setState("listening");
+}
+
+function showStartError(error) {
+  appendTurn("Start failed", error.message || String(error), true);
+  running = false;
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  setState("idle");
 }
 
 function stop() {
@@ -85,6 +103,7 @@ function stop() {
   processor?.disconnect();
   source?.disconnect();
   mediaStream?.getTracks().forEach((track) => track.stop());
+  modeHintEl.textContent = "";
   stopPlayback("stopped");
   resetBuffers();
   startBtn.disabled = false;
@@ -94,6 +113,10 @@ function stop() {
 
 function startBrowserAsr() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    startAudioVad().catch((error) => showStartError(error));
+    return;
+  }
   recognition = new Recognition();
   recognition.lang = "zh-CN";
   recognition.continuous = true;
@@ -101,11 +124,11 @@ function startBrowserAsr() {
   recognition.onstart = () => {
     running = true;
     browserAsrMode = true;
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
+    modeHintEl.textContent = "Browser ASR mode: speak a full sentence, then pause. The mic meter does not move in this mode.";
     setState("listening-browser-asr");
   };
   recognition.onaudiostart = () => {
+    setState("hearing-browser-asr");
     if (currentAudio) stopPlayback("interrupted");
   };
   recognition.onresult = (event) => {
@@ -115,8 +138,10 @@ function startBrowserAsr() {
     if (text) sendTextTurn(text);
   };
   recognition.onerror = (event) => {
-    appendTurn("Error", `Browser ASR failed: ${event.error}`, true);
-    setState("idle");
+    appendTurn("Browser ASR", `failed: ${event.error}; falling back to mic VAD upload`, true);
+    recognition = null;
+    browserAsrMode = false;
+    startAudioVad().catch((error) => showStartError(error));
   };
   recognition.onend = () => {
     if (running && browserAsrMode) recognition.start();

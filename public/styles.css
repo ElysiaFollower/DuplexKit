@@ -109,6 +109,13 @@ meter {
   font-weight: 600;
 }
 
+.mode-hint {
+  min-height: 22px;
+  margin: -12px 0 18px;
+  color: #5f6673;
+  font-size: 14px;
+}
+
 .transcript {
   display: grid;
   gap: 12px;
