@@ -8,12 +8,18 @@ const healthEl = document.querySelector("#health");
 const textInput = document.querySelector("#textInput");
 const sendTextBtn = document.querySelector("#sendTextBtn");
 const modeHintEl = document.querySelector("#modeHint");
+const floatingLevelEl = document.querySelector("#floatingLevel");
+const floatingLevelTextEl = document.querySelector("#floatingLevelText");
 
 const sessionId = crypto.randomUUID();
 let audioContext;
 let source;
 let processor;
 let mediaStream;
+let monitorContext;
+let monitorSource;
+let monitorProcessor;
+let monitorStream;
 let recognition;
 let running = false;
 let speaking = false;
@@ -64,6 +70,9 @@ async function start() {
   setState("starting");
   startBtn.disabled = true;
   stopBtn.disabled = false;
+  await startMicMonitor().catch((error) => {
+    modeHintEl.textContent = `Mic monitor unavailable: ${error.message || error}`;
+  });
   if ((preferBrowserAsr || healthMissingAsr) && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
     startBrowserAsr();
     return;
@@ -103,12 +112,54 @@ function stop() {
   processor?.disconnect();
   source?.disconnect();
   mediaStream?.getTracks().forEach((track) => track.stop());
+  stopMicMonitor();
   modeHintEl.textContent = "";
   stopPlayback("stopped");
   resetBuffers();
   startBtn.disabled = false;
   stopBtn.disabled = true;
   setState("idle");
+}
+
+async function startMicMonitor() {
+  if (monitorContext) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("getUserMedia is unavailable");
+  }
+  monitorStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    }
+  });
+  monitorContext = new AudioContext();
+  monitorSource = monitorContext.createMediaStreamSource(monitorStream);
+  monitorProcessor = monitorContext.createScriptProcessor(1024, 1, 1);
+  monitorProcessor.onaudioprocess = (event) => {
+    const input = event.inputBuffer.getChannelData(0);
+    const rms = Math.sqrt(input.reduce((sum, value) => sum + value * value, 0) / input.length);
+    const percent = Math.min(100, Math.round(rms * 520));
+    floatingLevelEl.style.width = `${percent}%`;
+    floatingLevelEl.classList.toggle("hot", percent > 70);
+    floatingLevelTextEl.textContent = `${percent}%`;
+  };
+  monitorSource.connect(monitorProcessor);
+  monitorProcessor.connect(monitorContext.destination);
+}
+
+function stopMicMonitor() {
+  monitorProcessor?.disconnect();
+  monitorSource?.disconnect();
+  monitorStream?.getTracks().forEach((track) => track.stop());
+  monitorProcessor = null;
+  monitorSource = null;
+  monitorStream = null;
+  monitorContext?.close().catch(() => {});
+  monitorContext = null;
+  floatingLevelEl.style.width = "0%";
+  floatingLevelEl.classList.remove("hot");
+  floatingLevelTextEl.textContent = "0%";
 }
 
 function startBrowserAsr() {

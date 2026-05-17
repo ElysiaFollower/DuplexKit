@@ -138,6 +138,50 @@ meter {
   background: #fff5f5;
 }
 
+.floating-meter {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: min(280px, calc(100vw - 36px));
+  padding: 12px;
+  border: 1px solid #c8ced8;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.14);
+}
+
+.floating-meter__label {
+  margin-bottom: 8px;
+  color: #5f6673;
+  font-size: 13px;
+}
+
+.floating-meter__track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4e8ef;
+}
+
+.floating-meter__bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: #14a46c;
+  transition: width 80ms linear, background-color 80ms linear;
+}
+
+.floating-meter__bar.hot {
+  background: #d94841;
+}
+
+.floating-meter__value {
+  margin-top: 6px;
+  color: #171717;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 640px) {
   .status-bar,
   .meters,
@@ -152,5 +196,10 @@ meter {
 
   button {
     flex: 1;
+  }
+
+  .floating-meter {
+    right: 12px;
+    bottom: 12px;
   }
 }
