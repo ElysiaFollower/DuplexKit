@@ -30,11 +30,18 @@
 
 - endpoint：`https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse`
 - resource id：`seed-tts-2.0`
-- speaker：默认 `zh_female_shuangkuaisisi_moon_bigtts`
+- speaker：默认 `zh_female_xiaohe_uranus_bigtts`，与 `seed-tts-2.0` 匹配。`*_moon_bigtts` 属于 1.0 资源族，会触发 `resource ID is mismatched with speaker related resource`。
 - 鉴权：`VOLCENGINE_TTS_API_KEY`，若缺失则尝试 `VOLCENGINE_API_KEY`
 
 官方文档说明 SSE 返回的音频数据是 base64，需要客户端拼接成音频字节；后端已在 `VolcengineSseTtsProvider` 中完成拼接。若火山 TTS 返回鉴权错误且 `LOCAL_TTS_FALLBACK=1`，macOS 上会降级为本地 `say` + `afconvert` 生成 WAV。
 
 ## 当前本地配置状态
 
-DreamingRAG `.env` 已提供 `DEEPSEEK_API_KEY` 和 `VOLCENGINE_API_KEY`。当前本仓库真实模式仍缺 `VOLCENGINE_ASR_APP_KEY`；`VOLCENGINE_API_KEY` 对火山 TTS SSE 返回 `Invalid X-Api-Key`，因此火山真实语音链路需要补齐 ASR/TTS speech key。当前 LLM + macOS 本地 TTS fallback 已通过真实 `/api/text-turn` smoke。
+DreamingRAG `.env` 已提供 `DEEPSEEK_API_KEY` 和 `VOLCENGINE_API_KEY`。用户新建应用后提供了 `APP_ID`、`ACCESS_TOKEN`、`SECRET_KEY`；当前代码自动将前两者映射到 ASR/TTS 旧版应用鉴权。
+
+当前验证结果：
+
+- TTS：`APP_ID + ACCESS_TOKEN + seed-tts-2.0 + zh_female_xiaohe_uranus_bigtts` 已通过真实 `/api/text-turn` smoke，返回 `audio/mpeg`。
+- ASR：`APP_ID + ACCESS_TOKEN` 鉴权可达接口，但 `/api/turn` 默认 flash resource `volc.bigasr.auc_turbo` 返回 `requested resource not granted`。已开通的 “Doubao-录音文件识别2.0” 不是该同步 flash resource。
+
+因此浏览器 demo 默认 `PREFER_BROWSER_ASR=1`，优先浏览器 ASR，再调用后端 LLM + 火山 TTS。若要纯后端 ASR，需要开通与 `volc.bigasr.auc_turbo` 匹配的极速/flash 识别资源，或后续实现 “录音文件识别2.0” 的异步 submit/query 流程。

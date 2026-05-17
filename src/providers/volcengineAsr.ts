@@ -6,16 +6,20 @@ export class VolcengineFlashAsrProvider implements AsrProvider {
   constructor(private readonly config: AppConfig["asr"]) {}
 
   async transcribe(input: Parameters<AsrProvider["transcribe"]>[0]): Promise<string> {
-    if (!this.config.appKey) {
-      throw new StageError("config", "Missing VOLCENGINE_ASR_APP_KEY", undefined, 400);
+    if (!this.config.apiKey && !this.config.appKey) {
+      throw new StageError("config", "Missing VOLCENGINE_ASR_API_KEY or APP_ID", undefined, 400);
     }
 
     const response = await fetch(this.config.endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-app-key": this.config.appKey,
-        ...(this.config.accessKey ? { "x-api-access-key": this.config.accessKey } : {}),
+        ...(this.config.apiKey
+          ? { "x-api-key": this.config.apiKey }
+          : {
+              "x-api-app-key": this.config.appKey,
+              ...(this.config.accessKey ? { "x-api-access-key": this.config.accessKey } : {})
+            }),
         "x-api-resource-id": this.config.resourceId,
         "x-api-request-id": input.requestId,
         "x-api-sequence": "-1"
@@ -29,12 +33,6 @@ export class VolcengineFlashAsrProvider implements AsrProvider {
           rate: 16000,
           bits: 16,
           channel: 1
-        },
-        additions: {
-          language: "zh-CN",
-          use_itn: "true",
-          use_punc: "true",
-          use_ddc: "true"
         }
       })
     });

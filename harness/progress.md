@@ -9,8 +9,8 @@
 
 - 当前功能项：无 active；F003 因缺火山 ASR app key blocked
 - 当前任务计划：`plans/active/2026-05-17-duplex-demo.md`
-- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、Browser 页面加载、真实 LLM + macOS TTS fallback 均通过
-- 下一步最佳动作：提交 fallback 收口；补齐火山 ASR/TTS speech key 后做 F003 纯火山语音链路验证。在缺 key 时可用浏览器 ASR + macOS TTS fallback 体验效果。
+- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、`npm run config:check`、真实 DeepSeek LLM + 火山 TTS 均通过
+- 下一步最佳动作：提交 APP_ID/ACCESS_TOKEN 适配与 TTS 2.0 收口；若要纯后端 ASR，开通与 `volc.bigasr.auc_turbo` 匹配的极速/flash 资源，或实现录音文件识别2.0异步 submit/query。
 
 ## 状态约定
 
@@ -34,4 +34,7 @@
 - 从 DreamingRAG `.env` 复制本地 `.env`，不提交密钥。
 - 发现真实模式仍缺 `VOLCENGINE_ASR_APP_KEY`；已有 `DEEPSEEK_API_KEY`，TTS 会尝试使用 `VOLCENGINE_API_KEY`。
 - 发现 `VOLCENGINE_API_KEY` 调火山 TTS SSE 返回 `Invalid X-Api-Key`，因此补 macOS TTS fallback。
-- 验证：`npm test` 通过，5 files / 11 tests；`npm run build` 通过；`npm run smoke:mock` 通过；内置浏览器打开页面显示 ready，文本入口提交后显示 speaking 并播放 mock audio；真实 `/api/text-turn` 走 DeepSeek LLM + macOS TTS fallback 返回 audio/wav。
+- 用户随后创建火山语音应用并在 `.env` 填入 `APP_ID`、`ACCESS_TOKEN`、`SECRET_KEY`；代码已自动映射旧版 app-token 鉴权。
+- TTS 2.0 需要 `zh_female_xiaohe_uranus_bigtts` 这类 `uranus` 音色；原 `moon` 音色会触发资源不匹配。
+- 验证：`npm test` 通过，5 files / 12 tests；`npm run build` 通过；`npm run smoke:mock` 通过；`npm run config:check` 通过；真实 `/api/text-turn` 走 DeepSeek LLM + 火山 TTS 返回 audio/mpeg。
+- 纯后端 ASR 仍 blocked：`/api/turn` 返回 ASR 403 code 45000030，`volc.bigasr.auc_turbo` 未授权。当前浏览器 demo 默认 `PREFER_BROWSER_ASR=1`，用浏览器 ASR + 后端 LLM/TTS 跑效果全双工。

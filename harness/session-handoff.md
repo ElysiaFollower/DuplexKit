@@ -11,13 +11,13 @@
 - 提交：`6861bd1 feat: scaffold duplex voice demo service` 后仍有未提交运行路径/README/test 更新
 - 脏文件：README、docs、src、tests、tsconfig、harness 状态更新
 - 当前计划：`plans/active/2026-05-17-duplex-demo.md`
-- 当前功能项：F003 blocked，等待火山 ASR/TTS speech API key；demo fallback 已可用
+- 当前功能项：F003 blocked，等待 `volc.bigasr.auc_turbo` flash ASR 资源授权；demo 使用浏览器 ASR + 火山 TTS 可用
 
 ## 当前已验证状态
 
-- 上次运行命令：`./scripts/harness-check.sh`; `npm test`; `npm run build`; `npm run smoke:mock`; `npm run config:check`
-- 结果：harness、测试、构建、mock HTTP smoke、页面加载、真实 LLM + macOS TTS fallback 均通过；纯火山语音链路缺 key
-- 证据：F002 evidence 已写入 `harness/feature_list.json`；Browser 文本入口 smoke 通过；真实 `/api/text-turn` 返回 DeepSeek reply 和 audio/wav；`npm run config:check` 显示真实模式缺 `VOLCENGINE_ASR_APP_KEY`
+- 上次运行命令：`./scripts/harness-check.sh`; `npm test`; `npm run build`; `npm run smoke:mock`; `npm run config:check`; 真实 `/api/text-turn`; 真实 `/api/turn` smoke
+- 结果：harness、测试、构建、mock HTTP smoke、配置检查、真实 DeepSeek LLM + 火山 TTS 均通过；纯后端 ASR 因资源未授权 blocked
+- 证据：F002/F003 evidence 已写入 `harness/feature_list.json`；真实 `/api/text-turn` 返回 DeepSeek reply 和 audio/mpeg；`/api/turn` 返回 ASR 403 code 45000030 `requested resource not granted`
 
 ## 本会话改动
 
@@ -30,8 +30,8 @@
 
 ## 仍损坏或未验证
 
-- 真实火山 ASR 未验证，因为当前 `.env` 缺 `VOLCENGINE_ASR_APP_KEY`；ASR 缺失时浏览器可用 Web Speech API 降级到 `/api/text-turn`。
-- 真实火山 TTS 已尝试但失败：`VOLCENGINE_API_KEY` 对 SSE TTS 返回 `Invalid X-Api-Key`；当前 macOS 本地 TTS fallback 可用。
+- 真实火山 ASR 后端路径未通过：当前应用没有 `volc.bigasr.auc_turbo` resource grant。已开通的 Doubao-录音文件识别2.0不是该同步 flash resource。
+- 真实火山 TTS 已通过：`APP_ID + ACCESS_TOKEN + seed-tts-2.0 + zh_female_xiaohe_uranus_bigtts` 返回 audio/mpeg。
 - 自动化未点击浏览器麦克风权限；需要用户本机手动授权后测试真实说话。
 
 ## 清洁状态
@@ -44,9 +44,9 @@
 
 ## 下一步最佳动作
 
-1. 提交 fallback 收口。
-2. 当前可运行 `npm run dev`，打开 `http://localhost:5177`；缺火山 ASR 时支持浏览器 ASR 降级，TTS 会用 macOS fallback。
-3. 若要纯火山链路，补 `VOLCENGINE_ASR_APP_KEY` 和 `VOLCENGINE_TTS_API_KEY` 到 `.env` 后再次运行真实麦克风验证。
+1. 提交 APP_ID/ACCESS_TOKEN 适配、TTS 2.0 音色修复和状态更新。
+2. 当前可运行 `npm run dev`，打开 `http://localhost:5177`；默认 `PREFER_BROWSER_ASR=1`，浏览器 ASR + 后端 DeepSeek + 火山 TTS。
+3. 若要纯后端 ASR，开通 `volc.bigasr.auc_turbo` 对应极速/flash 识别资源，或新增 Doubao-录音文件识别2.0异步 submit/query provider。
 
 ## 命令
 

@@ -22,19 +22,19 @@
       "behavior": "浏览器采集麦克风、前端 VAD/WAV 分段或浏览器 ASR 降级、播放 TTS 并在用户再次说话时中断；后端提供 ASR/LLM/TTS 编排、文本回合接口、本地 TTS fallback 和 mock 完整链路。",
       "status": "passing",
       "verification": "npm test && npm run build && npm run smoke:mock；DEMO_MOCK=1 npm start 后验证 /api/health、/api/turn、/api/text-turn 和浏览器页面加载。",
-      "evidence": "2026-05-17: npm test -> 5 files / 11 tests passed；npm run build -> pass；npm run smoke:mock -> pass；Browser 页面显示 ready；Browser 文本入口提交后显示 speaking 并播放 mock audio；真实 /api/text-turn 使用 DeepSeek LLM + macOS TTS fallback 返回 audio/wav 82476 bytes。",
+      "evidence": "2026-05-17: npm test -> 5 files / 12 tests passed；npm run build -> pass；npm run smoke:mock -> pass；npm run config:check -> ok；Browser 页面显示 ready；真实 /api/text-turn 使用 DeepSeek LLM + 火山 TTS 返回 audio/mpeg 24621 bytes。",
       "notes": "真实火山 ASR/TTS smoke 单独由 F003 跟踪；首版追求效果可用，不追求模型级原生实时全双工。"
     },
     {
       "id": "F003",
       "priority": "P0",
       "area": "api",
-      "title": "真实火山语音 API smoke",
-      "behavior": "使用真实火山 ASR/TTS 和真实 LLM 完成一次麦克风输入、文本回复、语音播放和播放打断。",
+      "title": "纯后端火山 ASR smoke",
+      "behavior": "使用火山后端 ASR、真实 LLM 和火山 TTS 完成一次后端音频输入、文本回复和语音输出。",
       "status": "blocked",
-      "verification": "补齐 VOLCENGINE_ASR_APP_KEY 后运行 npm run dev，并在浏览器完成一次真实语音回合；ASR 缺失时可用 /api/text-turn 先验证 LLM/TTS。",
-      "evidence": "2026-05-17: 配置检查显示 DEEPSEEK_API_KEY 已配置；真实 /api/text-turn 证明 LLM 可用；VOLCENGINE_API_KEY 调火山 TTS SSE 返回 Invalid X-Api-Key；缺 VOLCENGINE_ASR_APP_KEY。",
-      "notes": "需要用户准备火山语音识别 app key 和火山 TTS speech API key；缺 key 时 demo 使用浏览器 ASR/macOS TTS fallback。"
+      "verification": "开通与 VOLCENGINE_ASR_RESOURCE_ID=volc.bigasr.auc_turbo 匹配的极速/flash 识别资源后，运行 LOCAL_TTS_FALLBACK=0 npm start，并 POST WAV 到 /api/turn。",
+      "evidence": "2026-05-17: APP_ID + ACCESS_TOKEN 鉴权可达 ASR；/api/turn 返回 ASR 403 code 45000030: [resource_id=volc.bigasr.auc_turbo] requested resource not granted。真实 /api/text-turn 已证明 DeepSeek LLM + 火山 TTS 可用。",
+      "notes": "用户已开通 Doubao-录音文件识别2.0，但当前 /api/turn 使用同步 flash 资源 volc.bigasr.auc_turbo；demo 目前默认 PREFER_BROWSER_ASR=1，用浏览器 ASR + 后端 LLM/TTS 实现效果全双工。"
     }
   ]
 }

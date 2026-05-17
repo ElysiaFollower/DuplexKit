@@ -22,6 +22,7 @@ let silenceMs = 0;
 let currentAudio = null;
 let browserAsrMode = false;
 let healthMissingAsr = false;
+let preferBrowserAsr = false;
 
 const sampleRate = 16000;
 const frameMs = 2048 / 48000 * 1000;
@@ -46,17 +47,20 @@ async function checkHealth() {
     const data = await response.json();
     const missing = data.config?.missing || [];
     healthMissingAsr = missing.includes("VOLCENGINE_ASR_APP_KEY");
+    preferBrowserAsr = Boolean(data.config?.client?.preferBrowserAsr);
     const browserAsrAvailable = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
     healthEl.textContent = missing.length
       ? `missing: ${missing.join(", ")}${healthMissingAsr && browserAsrAvailable ? "; browser ASR fallback available" : ""}`
-      : "ready";
+      : browserAsrAvailable && preferBrowserAsr
+        ? "ready; browser ASR preferred"
+        : "ready";
   } catch (error) {
     healthEl.textContent = `health failed: ${error.message}`;
   }
 }
 
 async function start() {
-  if (healthMissingAsr && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
+  if ((preferBrowserAsr || healthMissingAsr) && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
     startBrowserAsr();
     return;
   }

@@ -6,8 +6,8 @@ export class VolcengineSseTtsProvider implements TtsProvider {
   constructor(private readonly config: AppConfig["tts"]) {}
 
   async synthesize(input: Parameters<TtsProvider["synthesize"]>[0]) {
-    if (!this.config.apiKey) {
-      throw new StageError("config", "Missing VOLCENGINE_TTS_API_KEY or VOLCENGINE_API_KEY", undefined, 400);
+    if (!this.config.apiKey && !(this.config.appId && this.config.accessKey)) {
+      throw new StageError("config", "Missing VOLCENGINE_TTS_API_KEY or APP_ID + ACCESS_TOKEN", undefined, 400);
     }
 
     const response = await fetch(this.config.endpoint, {
@@ -15,7 +15,12 @@ export class VolcengineSseTtsProvider implements TtsProvider {
       headers: {
         "content-type": "application/json",
         accept: "text/event-stream",
-        "x-api-key": this.config.apiKey,
+        ...(this.config.apiKey
+          ? { "x-api-key": this.config.apiKey }
+          : {
+              "x-api-app-id": this.config.appId,
+              "x-api-access-key": this.config.accessKey
+            }),
         "x-api-resource-id": this.config.resourceId,
         "x-api-request-id": input.requestId
       },

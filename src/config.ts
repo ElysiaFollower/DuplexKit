@@ -5,6 +5,7 @@ const RawEnv = z.object({
   PORT: z.coerce.number().int().positive().default(5177),
   PUBLIC_ORIGIN: z.string().default("http://localhost:5177"),
   DEMO_MOCK: z.string().optional(),
+  PREFER_BROWSER_ASR: z.string().default("1"),
 
   LLM_API_KEY: z.string().optional(),
   LLM_BASE_URL: z.string().optional(),
@@ -15,10 +16,14 @@ const RawEnv = z.object({
   DEEPSEEK_API_KEY: z.string().optional(),
   DEEPSEEK_BASE_URL: z.string().optional(),
 
+  APP_ID: z.string().optional(),
+  ACCESS_TOKEN: z.string().optional(),
+  SECRET_KEY: z.string().optional(),
   VOLCENGINE_API_KEY: z.string().optional(),
   VOLCENGINE_ASR_ENDPOINT: z
     .string()
     .default("https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"),
+  VOLCENGINE_ASR_API_KEY: z.string().optional(),
   VOLCENGINE_ASR_APP_KEY: z.string().optional(),
   VOLCENGINE_ASR_ACCESS_KEY: z.string().optional(),
   VOLCENGINE_ASR_RESOURCE_ID: z.string().default("volc.bigasr.auc_turbo"),
@@ -27,8 +32,10 @@ const RawEnv = z.object({
     .string()
     .default("https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse"),
   VOLCENGINE_TTS_API_KEY: z.string().optional(),
+  VOLCENGINE_TTS_APP_ID: z.string().optional(),
+  VOLCENGINE_TTS_ACCESS_KEY: z.string().optional(),
   VOLCENGINE_TTS_RESOURCE_ID: z.string().default("seed-tts-2.0"),
-  VOLCENGINE_TTS_SPEAKER: z.string().default("zh_female_shuangkuaisisi_moon_bigtts"),
+  VOLCENGINE_TTS_SPEAKER: z.string().default("zh_female_xiaohe_uranus_bigtts"),
   VOLCENGINE_TTS_FORMAT: z.enum(["mp3", "ogg_opus", "pcm"]).default("mp3"),
   VOLCENGINE_TTS_SAMPLE_RATE: z.coerce.number().int().positive().default(24000),
   LOCAL_TTS_FALLBACK: z.string().default("1")
@@ -42,14 +49,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const llmBaseUrl = stripTrailingSlash(
     parsed.LLM_BASE_URL || parsed.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
   );
-  const asrAppKey = parsed.VOLCENGINE_ASR_APP_KEY || "";
-  const asrAccessKey = parsed.VOLCENGINE_ASR_ACCESS_KEY || "";
-  const ttsApiKey = parsed.VOLCENGINE_TTS_API_KEY || parsed.VOLCENGINE_API_KEY || "";
+  const asrApiKey = parsed.VOLCENGINE_ASR_API_KEY || "";
+  const asrAppKey = parsed.VOLCENGINE_ASR_APP_KEY || parsed.APP_ID || "";
+  const asrAccessKey = parsed.VOLCENGINE_ASR_ACCESS_KEY || parsed.ACCESS_TOKEN || "";
+  const ttsAppId = parsed.VOLCENGINE_TTS_APP_ID || parsed.APP_ID || "";
+  const ttsAccessKey = parsed.VOLCENGINE_TTS_ACCESS_KEY || parsed.ACCESS_TOKEN || "";
+  const ttsApiKey = parsed.VOLCENGINE_TTS_API_KEY || "";
 
   return {
     port: parsed.PORT,
     publicOrigin: parsed.PUBLIC_ORIGIN,
     demoMock: parsed.DEMO_MOCK === "1" || parsed.DEMO_MOCK === "true",
+    preferBrowserAsr: parsed.PREFER_BROWSER_ASR !== "0" && parsed.PREFER_BROWSER_ASR !== "false",
     llm: {
       apiKey: llmApiKey,
       baseUrl: llmBaseUrl,
@@ -58,6 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     },
     asr: {
       endpoint: parsed.VOLCENGINE_ASR_ENDPOINT,
+      apiKey: asrApiKey,
       appKey: asrAppKey,
       accessKey: asrAccessKey,
       resourceId: parsed.VOLCENGINE_ASR_RESOURCE_ID
@@ -65,11 +77,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     tts: {
       endpoint: parsed.VOLCENGINE_TTS_ENDPOINT,
       apiKey: ttsApiKey,
+      appId: ttsAppId,
+      accessKey: ttsAccessKey,
       resourceId: parsed.VOLCENGINE_TTS_RESOURCE_ID,
       speaker: parsed.VOLCENGINE_TTS_SPEAKER,
       format: parsed.VOLCENGINE_TTS_FORMAT,
       sampleRate: parsed.VOLCENGINE_TTS_SAMPLE_RATE,
       localFallback: parsed.LOCAL_TTS_FALLBACK !== "0" && parsed.LOCAL_TTS_FALLBACK !== "false"
+    },
+    client: {
+      preferBrowserAsr: parsed.PREFER_BROWSER_ASR !== "0" && parsed.PREFER_BROWSER_ASR !== "false"
     }
   };
 }
@@ -78,8 +95,10 @@ export function getConfigStatus(config: AppConfig) {
   const missing: string[] = [];
   if (!config.demoMock) {
     if (!config.llm.apiKey) missing.push("LLM_API_KEY or DEEPSEEK_API_KEY");
-    if (!config.asr.appKey) missing.push("VOLCENGINE_ASR_APP_KEY");
-    if (!config.tts.apiKey) missing.push("VOLCENGINE_TTS_API_KEY or VOLCENGINE_API_KEY");
+    if (!config.asr.apiKey && !config.asr.appKey) missing.push("VOLCENGINE_ASR_API_KEY or APP_ID");
+    if (!config.tts.apiKey && !(config.tts.appId && config.tts.accessKey)) {
+      missing.push("VOLCENGINE_TTS_API_KEY or APP_ID + ACCESS_TOKEN");
+    }
   }
   return {
     ok: missing.length === 0,
@@ -93,14 +112,19 @@ export function getConfigStatus(config: AppConfig) {
     asr: {
       endpoint: config.asr.endpoint,
       resourceId: config.asr.resourceId,
-      configured: Boolean(config.asr.appKey)
+      authMode: config.asr.apiKey ? "api-key" : config.asr.appKey ? "app-token" : "missing",
+      configured: Boolean(config.asr.apiKey || config.asr.appKey)
     },
     tts: {
       endpoint: config.tts.endpoint,
       resourceId: config.tts.resourceId,
       speaker: config.tts.speaker,
       localFallback: config.tts.localFallback && process.platform === "darwin",
-      configured: Boolean(config.tts.apiKey)
+      authMode: config.tts.apiKey ? "api-key" : config.tts.appId && config.tts.accessKey ? "app-token" : "missing",
+      configured: Boolean(config.tts.apiKey || (config.tts.appId && config.tts.accessKey))
+    },
+    client: {
+      preferBrowserAsr: config.client.preferBrowserAsr
     }
   };
 }
