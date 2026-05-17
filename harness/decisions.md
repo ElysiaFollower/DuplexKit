@@ -55,7 +55,7 @@
 
 ### 2026-05-17 - 用户插话由 ASRInfo 立即停播并重规划
 
-- 决策：收到 `450 ASRInfo` 后前端立即停止当前播放并丢弃旧音频队列；用户说完后 Planner 决定 `continue_old`、`revise_response` 或 `new_task`，详见 `docs/adr/2026-05-17-interruption-and-replanning.md`。
+- 决策：收到 `450 ASRInfo` 后前端立即停止当前播放并丢弃旧音频队列；首版先信任火山原生全双工会基于插话调整后续输出，只做 raw event 观测，详见 `docs/adr/2026-05-17-interruption-and-replanning.md`。
 - 原因：`ASRInfo` 是最快的用户开口信号；打断播放不应等待 transcript、ASREnded 或 Planner。
 - 否决方案：暂停旧音频后继续播放；每个流式词都调用 Planner；等 Planner 决定后再停播。
-- 后续约束：旧音频被打断后不恢复播放，必须重新生成自然衔接语音；demo 阶段接受少量误停播，后续再加音量阈值和 transcript 校验。
+- 后续约束：旧音频被打断后不恢复播放；先验证火山是否自动停止/修正旧 reply，再决定是否后端按 reply_id 丢弃音频、发送 `515 ClientInterrupt` 或启用 Planner 重规划；demo 阶段接受少量误停播，后续再加音量阈值和 transcript 校验。
