@@ -16,19 +16,26 @@
 
 ## 决策
 
-工具调用主路线采用后端 Planner：
+工具调用主路线采用后端 Planner + 主动澄清：
 
 ```text
 用户语音
 -> 火山 realtime ASR transcript
 -> ASREnded
--> 后端 Planner LLM 生成 tool_call JSON
--> Tool Executor 执行真实工具
--> 502 ChatRAGText 注入工具结果和身体反馈
+-> 后端 Planner LLM 判断 tool_call / ask_clarification / no_action
+-> 参数足够：Tool Executor 执行真实工具
+-> 参数不足：502 ChatRAGText 让语音模型自然追问
+-> 工具完成：502 ChatRAGText 注入工具结果和身体反馈
 -> 火山 realtime 语音模型用第一人称播报
 ```
 
 火山 realtime 继续负责语音 I/O、ASR、打断、音频输出和自然播报。后端 Planner 负责“是否调用工具”和“工具参数”。Tool Executor 负责真实动作。
+
+Planner 输出动作类型：
+
+- `tool_call`：参数足够，执行工具。
+- `ask_clarification`：参数不足或置信度低，让语音模型向用户确认。
+- `no_action`：没有工具意图。
 
 ## 身体反馈
 
@@ -42,6 +49,28 @@
 ```
 
 需要长期记住的工具状态，再通过会话上下文写回，例如 `ConversationCreate` 或下一轮 `dialog_context`。
+
+## 主动澄清
+
+当 Planner 发现身份、地点、目标、权限或关键参数不足时，不猜测、不执行工具，而是生成澄清请求：
+
+```json
+{
+  "action": "ask_clarification",
+  "missing": ["user_identity", "office_location"],
+  "question": "您是 Ely 吗？办公室是中关村那间吗？"
+}
+```
+
+后端把澄清请求通过 `502 ChatRAGText` 注入实时语音模型：
+
+```text
+你现在缺少 user_identity 和 office_location。
+请自然向用户确认：您是 Ely 吗？办公室是中关村那间吗？
+不要提到 Planner、工具或系统。
+```
+
+用户回答后，新的 ASR transcript 再进入 Planner。Planner 用对话上下文补齐参数，然后执行工具。
 
 ## 为什么不是让语音模型直接调用工具
 
@@ -62,13 +91,14 @@
 
 ## 局限
 
-Planner 基于文本 transcript 和上下文工作，不能完整理解用户声色、韵律、身份线索或语气中的隐含信息。
+Planner 基于文本 transcript 和上下文工作，不能完整理解用户声色、韵律、身份线索或语气中的隐含信息。这个局限不隐藏。
 
 例如用户说“是我，帮我导航到我的办公室”，如果“是我”的身份识别依赖声纹或声色，纯文本 Planner 不知道是谁。demo 阶段接受这个局限。
 
 缓解方向：
 
 - 把浏览器/session 用户身份作为显式上下文传给 Planner。
+- 当身份、地点、目标不确定时，Planner 使用 `ask_clarification` 主动让语音模型确认。
 - 后续接入声纹/说话人识别，再把身份结果作为 Planner 输入。
 - 高风险或歧义工具动作要求确认。
 
