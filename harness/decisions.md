@@ -55,7 +55,7 @@
 
 ### 2026-05-17 - 工具调用必须有生命周期和结果投递门控
 
-- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；先通过 `502 ChatRAGText` 注入 `tool_started` 反馈，工具完成后只有仍 active 才注入 `tool_result`。
+- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；先通过 `300 ChatTTSText` 播放 `tool_started` 安抚反馈，工具完成后目标路线通过 `502 ChatRAGText` 注入 `tool_result`，当前 demo 可先用 `300 ChatTTSText` 稳定播报结果。
 - 原因：工具可能耗时，用户需要即时反馈；等待期间用户可能打断或改变意图，旧结果不能乱播。
 - 否决方案：只在工具完成后注入最终结果；不记录工具调用 ID；用户打断后仍无条件播报旧结果。
 - 后续约束：running tool 被用户打断后标记为 possibly superseded，最终是否投递结果由 Planner 基于新 transcript、`tool_call_id` 和 turn 状态决定。

@@ -24,8 +24,8 @@
 -> ASREnded
 -> 后端 Planner LLM 判断 tool_call / ask_clarification / no_action
 -> 参数足够：Tool Executor 执行真实工具
--> 参数不足：502 ChatRAGText 让语音模型自然追问
--> 工具完成：502 ChatRAGText 注入工具结果和身体反馈
+-> 参数不足：300 ChatTTSText 让语音模型自然追问
+-> 工具完成：通过 502 ChatRAGText 注入工具结果和身体反馈；当前 demo 可先用 300 ChatTTSText 稳定播报结果
 -> 火山 realtime 语音模型用第一人称播报
 ```
 
@@ -63,12 +63,10 @@ Planner 输出动作类型：
 }
 ```
 
-后端把澄清请求通过 `502 ChatRAGText` 注入实时语音模型：
+后端把澄清请求通过 `300 ChatTTSText` 播出，并把缺失参数记录在 Planner 日志：
 
 ```text
-你现在缺少 user_identity 和 office_location。
-请自然向用户确认：您是 Ely 吗？办公室是中关村那间吗？
-不要提到 Planner、工具或系统。
+您是 Ely 吗？办公室是中关村那间吗？
 ```
 
 用户回答后，新的 ASR transcript 再进入 Planner。Planner 用对话上下文补齐参数，然后执行工具。
@@ -80,14 +78,21 @@ Planner 输出动作类型：
 ```text
 Planner 决定 tool_call
 -> 创建 tool_call_id，绑定当前 question_id / turn_id
--> 502 ChatRAGText 注入 tool_started 身体反馈
+-> 300 ChatTTSText 播放 tool_started 安抚反馈
 -> Tool Executor 执行
 -> 工具完成
--> 若 tool_call 仍 active，502 ChatRAGText 注入 tool_result 身体反馈
+-> 若 tool_call 仍 active，目标路线用 502 ChatRAGText 注入 tool_result 身体反馈
+-> 当前 demo 若 502 时序不稳定，可用 300 ChatTTSText 播报 tool_result
 -> 若用户已打断或 Planner 判定过期，丢弃结果或只写后台状态
 ```
 
-`tool_started` 注入示例：
+`tool_started` 先用 `300 ChatTTSText` 直接播短句，例如：
+
+```text
+我来设置一下。
+```
+
+对应的内部身体反馈仍记录在日志中：
 
 ```text
 你刚刚决定执行外部动作 map.set_destination。

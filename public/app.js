@@ -18,6 +18,7 @@ let running = false;
 let playbackAt = 0;
 let currentYou;
 let currentAssistant;
+const playbackNodes = new Set();
 
 const upstreamSampleRate = 24000;
 
@@ -116,6 +117,7 @@ function stop() {
   audioContext = null;
   currentYou = null;
   currentAssistant = null;
+  clearPlayback();
   modeHintEl.textContent = "";
   resetFloatingMeter();
   startBtn.disabled = false;
@@ -164,15 +166,26 @@ async function handleRealtimeMessage(event) {
     appendTurn("Error", message.message, true);
     setState("error");
   }
-  if (message.type === "asr_start") setState("listening");
+  if (message.type === "asr_start") {
+    clearPlayback();
+    appendTurn("Interrupt", "user speech detected; cleared queued playback");
+    setState("listening");
+  }
   if (message.type === "transcript") updateYou(message.text);
   if (message.type === "asr_end") setState("thinking");
   if (message.type === "tts_start") {
+    if (message.suppressed) {
+      appendTurn("Realtime", `suppressed ${message.ttsType || "default"} reply`);
+      return;
+    }
     setState("speaking");
     ensureAssistant();
   }
   if (message.type === "assistant_text") updateAssistant(message.text);
   if (message.type === "tts_end" || message.type === "llm_end") setState("listening");
+  if (message.type === "planner") appendTurn("Planner", JSON.stringify(message.decision));
+  if (message.type === "tool") appendTurn("Tool", JSON.stringify(message));
+  if (message.type === "raw_event") console.debug("realtime event", message);
 }
 
 function playPcm(arrayBuffer) {
@@ -184,9 +197,23 @@ function playPcm(arrayBuffer) {
   const node = audioContext.createBufferSource();
   node.buffer = buffer;
   node.connect(audioContext.destination);
+  playbackNodes.add(node);
+  node.addEventListener("ended", () => playbackNodes.delete(node), { once: true });
   const startAt = Math.max(audioContext.currentTime + 0.02, playbackAt);
   node.start(startAt);
   playbackAt = startAt + buffer.duration;
+}
+
+function clearPlayback() {
+  for (const node of playbackNodes) {
+    try {
+      node.stop();
+    } catch {
+      // already stopped
+    }
+  }
+  playbackNodes.clear();
+  if (audioContext) playbackAt = audioContext.currentTime;
 }
 
 function updateYou(text) {

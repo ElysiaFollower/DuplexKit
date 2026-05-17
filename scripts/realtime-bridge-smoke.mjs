@@ -14,6 +14,12 @@ let audioBytes = 0;
 const audioChunks = [];
 let sent = false;
 const seen = [];
+const toolEvents = [];
+let toolStarted = false;
+let toolSettled = false;
+let llmEndAfterTool = false;
+let keepAliveInterval;
+let finished = false;
 
 const ws = new WebSocket(url);
 
@@ -40,20 +46,37 @@ ws.on("message", async (data, isBinary) => {
   }
   if (message.type === "transcript") transcript = message.text;
   if (message.type === "assistant_text") text = message.text;
+  if (message.type === "tool") {
+    toolEvents.push(message);
+    if (message.phase === "started") toolStarted = true;
+    if (message.phase === "result" || message.phase === "dropped") toolSettled = true;
+  }
+  if (message.type === "tts_end" && toolStarted && toolSettled) finish();
   if (message.type === "llm_end") {
-    clearTimeout(timeout);
-    const audio = Buffer.concat(audioChunks);
-    const audioStats = getFloat32AudioStats(audio);
-    console.log(JSON.stringify({ ok: true, seen, transcript, text, audioBytes, audioFormat: "pcm_f32le", audioStats }, null, 2));
-    ws.close();
+    if (toolStarted && !toolSettled) return;
+    if (toolStarted && toolSettled) llmEndAfterTool = true;
+    if (toolStarted && !llmEndAfterTool) return;
+    finish();
   }
   if (message.type === "error") {
     clearTimeout(timeout);
+    if (keepAliveInterval) clearInterval(keepAliveInterval);
     console.error(JSON.stringify({ ok: false, reason: "server-error", message, seen }, null, 2));
     ws.close();
     process.exit(3);
   }
 });
+
+function finish() {
+  if (finished) return;
+  finished = true;
+  clearTimeout(timeout);
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
+  const audio = Buffer.concat(audioChunks);
+  const audioStats = getFloat32AudioStats(audio);
+  console.log(JSON.stringify({ ok: true, seen, transcript, text, toolEvents, audioBytes, audioFormat: "pcm_f32le", audioStats }, null, 2));
+  ws.close();
+}
 
 ws.on("error", (error) => {
   clearTimeout(timeout);
@@ -78,6 +101,9 @@ async function sendAudioChunks(socket) {
     socket.send(silence, { binary: true });
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  keepAliveInterval = setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) socket.send(silence, { binary: true });
+  }, 100);
 }
 
 function extractWavData(wav) {

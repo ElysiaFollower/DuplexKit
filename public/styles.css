@@ -99,6 +99,28 @@ meter {
   font-size: 14px;
 }
 
+.demo-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 18px;
+  color: #5f6673;
+  font-size: 13px;
+}
+
+.demo-tools strong,
+.demo-tools span {
+  padding: 5px 8px;
+  border: 1px solid #d9dde3;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.demo-tools strong {
+  color: #171717;
+}
+
 .transcript {
   display: grid;
   gap: 12px;

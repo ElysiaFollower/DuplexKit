@@ -22,6 +22,19 @@ npm start
 npm run dev
 ```
 
+## Tool Demo
+
+当前 demo 带一个规则版后端 Planner 和 mock 地图工具，用于验证工具调用生命周期：
+
+- “打开地图”
+- “设置终点北京南站”
+- “导航到北京南站”
+- “导航到我的办公室”
+
+命中工具后，后端会记录 `planner -> tool_started -> tool_result`，并用实时语音链路播出“我来...”和“好了...”反馈。用户开口时，前端收到 `ASRInfo` 会立即清掉排队播放。
+
+当前 demo 为保证可听效果，`tool_started` 和 `tool_result` 播报使用 `300 ChatTTSText`；`502 ChatRAGText` 仍是目标结果注入路线，待继续调稳定时序。
+
 ## Required API Variables
 
 - `APP_ID` / `ACCESS_TOKEN`：火山实时语音大模型鉴权。

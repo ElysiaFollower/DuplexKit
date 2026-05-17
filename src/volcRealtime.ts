@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import type { RawData, WebSocket as ClientSocket } from "ws";
 import WebSocket from "ws";
 import type { AppConfig } from "./config.js";
+import { clarificationPrompt, DemoToolRuntime, toolResultPrompt, toolStartedPrompt } from "./toolPlanner.js";
 
 type RealtimeConfig = AppConfig["realtime"];
 type ByteBuffer = Buffer<ArrayBufferLike>;
@@ -13,6 +14,8 @@ const events = {
   startSession: 100,
   finishSession: 102,
   audio: 200,
+  chatTtsText: 300,
+  chatRagText: 502,
   asrStart: 450,
   asrResponse: 451,
   asrEnd: 459,
@@ -53,6 +56,11 @@ class VolcRealtimeBridge {
   private sessionStarted = false;
   private closed = false;
   private text = "";
+  private readonly tools = new DemoToolRuntime();
+  private latestTranscript = "";
+  private currentQuestionId = "";
+  private suppressDefaultReply = false;
+  private currentAudioAllowed = true;
 
   constructor(private readonly client: ClientSocket, private readonly config: RealtimeConfig) {
     this.upstream = new WebSocket(config.endpoint, {
@@ -131,10 +139,10 @@ class VolcRealtimeBridge {
             },
             dialog: {
               bot_name: "豆包",
-              system_role: "你是一个简短中文语音助手。",
+              system_role: "你是一个简短中文语音助手。你会把外部工具结果当作自己的身体动作反馈，用第一人称自然简短地告诉用户。",
               dialog_id: this.sessionId,
               speaking_style: "回答简短自然。",
-              extra: { strict_audit: false }
+              extra: { strict_audit: false, model: "1.2.1.1" }
             }
           },
           this.sessionId
@@ -154,29 +162,107 @@ class VolcRealtimeBridge {
   }
 
   private forwardEvent(parsed: ParsedSuccess) {
-    if (parsed.event === events.asrStart) this.sendJson({ type: "asr_start" });
-    if (parsed.event === events.asrEnd) this.sendJson({ type: "asr_end" });
-    if (parsed.event === events.ttsStart) this.sendJson({ type: "tts_start" });
+    this.forwardRawEvent(parsed);
+
+    if (parsed.event === events.asrStart) {
+      this.latestTranscript = "";
+      this.currentQuestionId = extractId(parsed.payload, "question_id") || crypto.randomUUID();
+      this.suppressDefaultReply = false;
+      this.currentAudioAllowed = true;
+      this.tools.markPossiblySuperseded();
+      this.sendJson({ type: "asr_start", questionId: this.currentQuestionId });
+    }
+    if (parsed.event === events.asrEnd) {
+      this.sendJson({ type: "asr_end", questionId: this.currentQuestionId });
+      void this.runPlanner();
+    }
+    if (parsed.event === events.ttsStart) {
+      const ttsType = extractId(parsed.payload, "tts_type");
+      this.currentAudioAllowed = !this.suppressDefaultReply || ttsType === "chat_tts_text" || ttsType === "external_rag";
+      this.sendJson({
+        type: "tts_start",
+        replyId: extractId(parsed.payload, "reply_id"),
+        ttsType,
+        suppressed: !this.currentAudioAllowed
+      });
+    }
     if (parsed.event === events.ttsSentenceEnd) this.sendJson({ type: "tts_sentence_end" });
     if (parsed.event === events.ttsEnd) this.sendJson({ type: "tts_end" });
     if (parsed.event === events.llmTextEnd) this.sendJson({ type: "llm_end" });
 
     if (parsed.event === events.asrResponse) {
       const transcript = extractTranscript(parsed.payload);
-      if (transcript) this.sendJson({ type: "transcript", text: transcript });
+      if (transcript) {
+        this.latestTranscript = transcript;
+        this.sendJson({ type: "transcript", text: transcript, questionId: this.currentQuestionId });
+      }
     }
 
     if (parsed.event === events.llmText) {
       const delta = extractTextDelta(parsed.payload);
-      if (delta) {
+      if (delta && this.currentAudioAllowed) {
         this.text += delta;
         this.sendJson({ type: "assistant_text", delta, text: this.text });
       }
     }
 
-    if (parsed.event === events.ttsResponse && parsed.rawPayload.length > 0) {
+    if (parsed.event === events.ttsResponse && parsed.rawPayload.length > 0 && this.currentAudioAllowed) {
       this.client.send(parsed.rawPayload, { binary: true });
     }
+  }
+
+  private async runPlanner() {
+    const transcript = this.latestTranscript.trim();
+    const turnId = this.currentQuestionId || crypto.randomUUID();
+    const decision = this.tools.plan(transcript);
+    this.sendJson({ type: "planner", transcript, decision });
+
+    if (decision.action === "ask_clarification") {
+      this.suppressDefaultReply = true;
+      this.currentAudioAllowed = false;
+      this.sendChatTtsText(decision.question);
+      this.sendJson({ type: "tool", phase: "clarification", prompt: clarificationPrompt(decision) });
+      return;
+    }
+
+    if (decision.action !== "tool_call") return;
+
+    this.suppressDefaultReply = true;
+    this.currentAudioAllowed = false;
+    const call = this.tools.start(turnId, decision);
+    this.sendJson({ type: "tool", phase: "started", call });
+    this.sendJson({ type: "tool", phase: "started_prompt", prompt: toolStartedPrompt(call, decision.spoken) });
+    this.sendChatTtsText(decision.spoken);
+
+    const result = await this.tools.execute(call.toolCallId);
+    if (!result) {
+      this.sendJson({ type: "tool", phase: "dropped", toolCallId: call.toolCallId });
+      return;
+    }
+
+    this.sendJson({ type: "tool", phase: "result", result });
+    this.sendJson({ type: "tool", phase: "result_prompt", prompt: toolResultPrompt(result) });
+    this.sendChatTtsText(`好了，${result.summary}。`);
+  }
+
+  private sendChatRagText(externalRag: string) {
+    if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
+    this.upstream.send(packet(events.chatRagText, { external_rag: externalRag }, this.sessionId));
+  }
+
+  private sendChatTtsText(content: string) {
+    if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
+    this.upstream.send(packet(events.chatTtsText, { start: true, content, end: true }, this.sessionId));
+  }
+
+  private forwardRawEvent(parsed: ParsedSuccess) {
+    const payload = parsed.payload as Record<string, unknown>;
+    this.sendJson({
+      type: "raw_event",
+      event: parsed.event,
+      questionId: typeof payload?.question_id === "string" ? payload.question_id : undefined,
+      replyId: typeof payload?.reply_id === "string" ? payload.reply_id : undefined
+    });
   }
 
   private fail(message: string) {
@@ -251,15 +337,20 @@ function parseResponse(buffer: ByteBuffer): ParsedResponse {
 
 function extractTranscript(payload: unknown) {
   const value = payload as {
-    results?: Array<{ alternatives?: Array<{ text?: string }> }>;
+    results?: Array<{ text?: string; alternatives?: Array<{ text?: string }> }>;
     text?: string;
   };
-  return value.results?.[0]?.alternatives?.[0]?.text || value.text || "";
+  return value.results?.[0]?.text || value.results?.[0]?.alternatives?.[0]?.text || value.text || "";
 }
 
 function extractTextDelta(payload: unknown) {
   const value = payload as { content?: string; text?: string };
   return value.content || value.text || "";
+}
+
+function extractId(payload: unknown, key: string) {
+  const value = payload as Record<string, unknown>;
+  return typeof value?.[key] === "string" ? value[key] : "";
 }
 
 function u32(value: number) {
