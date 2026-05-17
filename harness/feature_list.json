@@ -19,22 +19,22 @@
       "priority": "P0",
       "area": "demo",
       "title": "浏览器到后端的全双工语音 demo",
-      "behavior": "浏览器采集麦克风，单一 Web Audio VAD/WAV pipeline 判断开口、打断和分段上传；后端提供 ASR/LLM/TTS 编排、调试文本回合接口、本地 TTS fallback 和 mock 完整链路。",
+      "behavior": "浏览器采集麦克风并持续发送 24kHz PCM 到 /api/realtime；后端桥接火山实时语音大模型；音量条只做采集观测，不做本地 VAD 判定。",
       "status": "passing",
-      "verification": "npm test && npm run build && npm run smoke:mock；DEMO_MOCK=1 npm start 后验证 /api/health、/api/turn、/api/text-turn 和浏览器页面加载。",
-      "evidence": "2026-05-17: npm test -> 5 files / 12 tests passed；npm run build -> pass；npm run smoke:mock -> pass；npm run config:check -> ok；Browser 页面显示 ready；真实 /api/text-turn 使用 DeepSeek LLM + 火山 TTS 返回 audio/mpeg 24621 bytes。",
-      "notes": "真实火山 ASR/TTS smoke 单独由 F003 跟踪；首版追求效果可用，不追求模型级原生实时全双工。"
+      "verification": "npm test && npm run build && npm run smoke:mock && npm run smoke:bridge；打开 http://localhost:5177 后授权麦克风。",
+      "evidence": "2026-05-17: npm test -> 5 files / 12 tests passed；npm run build -> pass；npm run smoke:mock -> pass；npm run config:check -> ok；npm run smoke:bridge -> transcript/text/audioBytes 全返回；页面 /api/health ready。",
+      "notes": "主路线已切为原生 realtime。旧 /api/turn 和 /api/text-turn 只作为调试接口保留。"
     },
     {
       "id": "F003",
       "priority": "P0",
       "area": "api",
-      "title": "纯后端火山 ASR smoke",
-      "behavior": "使用火山后端 ASR、真实 LLM 和火山 TTS 完成一次后端音频输入、文本回复和语音输出。",
-      "status": "blocked",
-      "verification": "开通与 VOLCENGINE_ASR_RESOURCE_ID=volc.bigasr.auc_turbo 匹配的极速/flash 识别资源后，运行 LOCAL_TTS_FALLBACK=0 npm start，并 POST WAV 到 /api/turn。",
-      "evidence": "2026-05-17: APP_ID + ACCESS_TOKEN 鉴权可达 ASR；/api/turn 返回 ASR 403 code 45000030: [resource_id=volc.bigasr.auc_turbo] requested resource not granted。真实 /api/text-turn 已证明 DeepSeek LLM + 火山 TTS 可用。",
-      "notes": "用户已开通 Doubao-录音文件识别2.0，但当前 /api/turn 使用同步 flash 资源 volc.bigasr.auc_turbo；当前单一路线 blocked 在 ASR resource grant。"
+      "title": "火山实时语音大模型 smoke",
+      "behavior": "使用 volc.speech.dialog 原生实时语音大模型完成音频输入、转写、回复文本和语音输出。",
+      "status": "passing",
+      "verification": "npm run smoke:realtime && npm run smoke:bridge",
+      "evidence": "2026-05-17: npm run smoke:realtime -> transcript=你好，请介绍一下你自己。且返回 text/audioBytes；npm run smoke:bridge -> 经本地 /api/realtime 桥接返回 transcript/text/audioBytes。",
+      "notes": "用户已授权实时语音大模型；这条路线取代旧的本地 VAD + ASR/LLM/TTS 编排路线。"
     }
   ]
 }

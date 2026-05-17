@@ -7,9 +7,9 @@
 
 首版采用浏览器 + Node.js 后端的单进程原型。
 
-- 浏览器：使用 Web Audio/VAD 分段采集用户语音，用同一音频流驱动音量条、开口检测、打断检测和 WAV 上传。播放 TTS 时继续监听；检测到用户再次开口就停止当前播放。
-- 后端：暴露静态页面、`/api/turn` 和调试用 `/api/text-turn`。主路线只用 `/api/turn`：接收音频片段并编排 ASR、LLM、TTS。
-- ASR/TTS：优先使用火山引擎 API；缺火山 TTS 权限时，macOS 本地可用 `say` + `afconvert` 作为 demo fallback。
-- LLM：使用模型中转站的 OpenAI-compatible Chat Completions API。
+- 浏览器：使用 Web Audio 持续采集用户语音，显示音量条，只做 24kHz mono PCM 上行和 24kHz mono PCM 下行播放。
+- 后端：暴露静态页面和 `/api/realtime` WebSocket。主路线只桥接火山实时语音大模型，不在本地做 VAD、ASR、LLM、TTS 编排。
+- 旧调试接口：`/api/turn` 和 `/api/text-turn` 仍保留，用于验证旧 ASR/LLM/TTS 组件，不是主 demo 路线。
+- 实时模型：使用火山引擎 realtime dialogue endpoint `wss://openspeech.bytedance.com/api/v3/realtime/dialogue`，resource id `volc.speech.dialog`。
 
-这不是 Moshi/SeedDuplex 式的原生流式全双工模型。首版的“全双工效果”来自单一 Web Audio VAD pipeline：持续监听、噪音校准、分段提交和播放打断。
+当前 demo 已切到原生实时全双工路线：用户开口检测、说完判定、打断和回复生成都由火山 realtime 模型处理。音量条只用于调试麦克风采集强度。

@@ -1,8 +1,8 @@
 # Duplex Voice Demo
 
-一个“效果上全双工”的语音交互 demo。浏览器负责麦克风采集、VAD 分段、播放和打断；后端负责 ASR -> LLM -> TTS 编排。
+一个原生实时语音全双工 demo。浏览器负责麦克风采集、音量观测和 PCM 播放；后端负责把浏览器 WebSocket 桥接到火山引擎实时语音大模型。
 
-首版不是 Moshi/SeedDuplex 式原生全双工模型，而是用持续监听、分段上传和播放中断实现可感知的全双工效果。
+主路线不再用本地 VAD 判断“说完”或“打断”。用户是否开口、何时结束、是否打断回复，都交给火山 realtime 模型处理。
 
 ## Quick Start
 
@@ -12,14 +12,16 @@ npm run build
 DEMO_MOCK=1 npm start
 ```
 
-打开 `http://localhost:5177`。mock 模式不调用外部 API，用来验证浏览器页面、后端接口和打断状态机。
+打开 `http://localhost:5177`。mock 模式不调用外部 API，用来验证浏览器页面和旧 HTTP 调试接口。
 
-真实模式只有一条语音路线：Web Audio 采集麦克风，前端 VAD 分段，上传 `/api/turn`，后端执行 ASR -> LLM -> TTS。当前已开通的 “Doubao-录音文件识别2.0” 不是 `/api/turn` 使用的同步 flash 资源 `volc.bigasr.auc_turbo`，所以语音链路会在 ASR 阶段 blocked。先调这个点。
+真实模式只有一条语音路线：Web Audio 采集麦克风，前端持续发送 24kHz mono PCM 到 `/api/realtime`，后端桥接 `wss://openspeech.bytedance.com/api/v3/realtime/dialogue`。默认 resource id 是 `volc.speech.dialog`。
 
 无人值守 smoke：
 
 ```sh
 npm run smoke:mock
+npm run smoke:realtime
+npm run smoke:bridge
 ```
 
 真实 API 模式：
@@ -34,11 +36,10 @@ npm run dev
 
 ## Required API Variables
 
-- `DEEPSEEK_API_KEY` 或 `LLM_API_KEY`：OpenAI-compatible Chat Completions。
-- `VOLCENGINE_ASR_APP_KEY`：火山引擎大模型录音文件极速版识别 API。新版控制台只需要 app key；旧版还需要 `VOLCENGINE_ASR_ACCESS_KEY`。
-- `VOLCENGINE_TTS_API_KEY` 或 `VOLCENGINE_API_KEY`：火山引擎豆包语音合成 SSE API。
-- `APP_ID` / `ACCESS_TOKEN`：火山旧版应用字段，当前代码会自动映射到 ASR/TTS 鉴权。
-- `VOLCENGINE_TTS_SPEAKER`：默认 `zh_female_xiaohe_uranus_bigtts`，用于 `seed-tts-2.0`。
+- `APP_ID` / `ACCESS_TOKEN`：实时语音大模型鉴权；也会兼容映射到旧 HTTP ASR/TTS 调试接口。
+- `VOLCENGINE_REALTIME_SPEAKER`：默认 `zh_female_vv_jupiter_bigtts`。
+- `DEEPSEEK_API_KEY` 或 `LLM_API_KEY`：仅旧 `/api/turn`、`/api/text-turn` 调试接口需要。
+- `VOLCENGINE_TTS_*`：仅旧 `/api/turn`、`/api/text-turn` 调试接口需要。
 
 运行 `GET /api/health` 可以查看缺失项，不会输出密钥。
 
@@ -52,6 +53,15 @@ npm run dev
 ```
 
 ## HTTP API
+
+主 demo 使用 WebSocket：
+
+`GET /api/realtime`
+
+- 浏览器上行：24kHz mono signed int16 PCM binary frame。
+- 后端下行：JSON 状态/转写/回复文本事件，以及 24kHz mono signed int16 PCM binary frame。
+
+旧 HTTP 调试接口仍保留：
 
 `POST /api/turn`
 
@@ -90,5 +100,6 @@ npm run dev
 
 ## API References
 
-- 火山引擎 ASR：大模型录音文件极速版识别 API，`POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash`。
+- 火山引擎实时语音大模型：`WSS wss://openspeech.bytedance.com/api/v3/realtime/dialogue`，resource id `volc.speech.dialog`。
+- 火山引擎 ASR：豆包流式语音识别模型2.0，`WSS wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`。
 - 火山引擎 TTS：HTTP SSE 单向流式 V3，`POST https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse`。

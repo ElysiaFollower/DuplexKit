@@ -7,7 +7,7 @@
 
 ## 目标
 
-交付一个可运行浏览器 demo：用户通过麦克风输入语音，后端调用火山 ASR、模型中转站 LLM、火山 TTS 返回可播放回复；用户再次说话时前端能中断播放并提交新音频。
+交付一个可运行浏览器 demo：用户通过麦克风输入语音，浏览器持续发送 PCM 到后端，后端桥接火山实时语音大模型并返回可播放 PCM 音频。用户再次说话时由 realtime 模型处理打断和端点检测。
 
 ## 非目标
 
@@ -20,8 +20,10 @@
 - `./scripts/harness-check.sh` 通过。
 - `npm test` 通过。
 - `npm run build` 通过。
+- `npm run smoke:realtime` 通过。
+- `npm run smoke:bridge` 通过。
 - `.env.example` 明确列出需要的变量，真实 `.env` 不进入 git。
-- `npm run dev` 可启动服务，浏览器页面可采集麦克风并展示完整状态流。
+- `npm run dev` 可启动服务，浏览器页面可采集麦克风、显示音量条、经 `/api/realtime` 收发音频。
 
 ## 分片提交
 
@@ -29,3 +31,4 @@
 2. 项目骨架、配置和测试框架。
 3. API 客户端与编排服务。
 4. 浏览器 demo 与验证收尾。
+5. 火山 realtime 原生全双工切换。

@@ -6,8 +6,8 @@ describe("config", () => {
     const config = loadConfig({
       DEEPSEEK_API_KEY: "sk-test",
       DEMO_MOCK: "0",
-      VOLCENGINE_ASR_APP_KEY: "asr",
-      VOLCENGINE_TTS_API_KEY: "tts"
+      APP_ID: "app-id",
+      ACCESS_TOKEN: "token"
     });
     expect(config.llm.apiKey).toBe("sk-test");
     expect(getConfigStatus(config).ok).toBe(true);
@@ -25,7 +25,10 @@ describe("config", () => {
     expect(status.ok).toBe(true);
     expect(status.asr.authMode).toBe("app-token");
     expect(status.tts.authMode).toBe("app-token");
+    expect(status.realtime.configured).toBe(true);
     expect(config.asr.appKey).toBe("app-id");
+    expect(config.realtime.appId).toBe("app-id");
+    expect(config.realtime.accessToken).toBe("token");
     expect(config.tts.appId).toBe("app-id");
     expect(config.tts.accessKey).toBe("token");
   });
@@ -33,7 +36,7 @@ describe("config", () => {
   it("reports missing external API variables outside mock mode", () => {
     const status = getConfigStatus(loadConfig({ DEMO_MOCK: "0" }));
     expect(status.ok).toBe(false);
-    expect(status.missing).toContain("LLM_API_KEY or DEEPSEEK_API_KEY");
-    expect(status.missing).toContain("VOLCENGINE_ASR_API_KEY or APP_ID");
+    expect(status.missing).toContain("VOLCENGINE_REALTIME_APP_ID or APP_ID");
+    expect(status.missing).toContain("VOLCENGINE_REALTIME_ACCESS_TOKEN or ACCESS_TOKEN");
   });
 });

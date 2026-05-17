@@ -7,10 +7,10 @@
 
 ## 当前状态
 
-- 当前功能项：无 active；F003 因缺火山 ASR app key blocked
+- 当前功能项：无 active；F002/F003 均 passing
 - 当前任务计划：`plans/active/2026-05-17-duplex-demo.md`
-- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、`npm run config:check`、真实 DeepSeek LLM + 火山 TTS 均通过
-- 下一步最佳动作：提交 APP_ID/ACCESS_TOKEN 适配与 TTS 2.0 收口；若要纯后端 ASR，开通与 `volc.bigasr.auc_turbo` 匹配的极速/flash 资源，或实现录音文件识别2.0异步 submit/query。
+- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、`npm run config:check`、`npm run smoke:realtime`、`npm run smoke:bridge` 均通过
+- 下一步最佳动作：用户在浏览器授权麦克风后，人工测试真实说话、插话、打断体验。
 
 ## 状态约定
 
@@ -37,4 +37,13 @@
 - 用户随后创建火山语音应用并在 `.env` 填入 `APP_ID`、`ACCESS_TOKEN`、`SECRET_KEY`；代码已自动映射旧版 app-token 鉴权。
 - TTS 2.0 需要 `zh_female_xiaohe_uranus_bigtts` 这类 `uranus` 音色；原 `moon` 音色会触发资源不匹配。
 - 验证：`npm test` 通过，5 files / 12 tests；`npm run build` 通过；`npm run smoke:mock` 通过；`npm run config:check` 通过；真实 `/api/text-turn` 走 DeepSeek LLM + 火山 TTS 返回 audio/mpeg。
-- 纯后端 ASR 仍 blocked：`/api/turn` 返回 ASR 403 code 45000030，`volc.bigasr.auc_turbo` 未授权。已砍掉浏览器 ASR fallback，当前只保留 Web Audio VAD -> /api/turn 单一路线。
+- 已纠正 ASR 路线：不再使用 `volc.bigasr.auc_turbo`，改为用户已授权的豆包流式语音识别模型2.0，默认 resource `volc.seedasr.sauc.duration`。
+- 后续决策：`/api/turn` 不再是主路线；主 demo 改接实时语音大模型。
+
+### 2026-05-17 - 切换到火山实时语音大模型原生全双工
+
+- 按用户要求测试原生全双工路线，确认 `wss://openspeech.bytedance.com/api/v3/realtime/dialogue` + `volc.speech.dialog` 可用。
+- 新增后端 `/api/realtime` WebSocket 桥接：浏览器上行 24kHz mono int16 PCM，后端转火山 realtime；火山下行 ASR/LLM/TTS 事件和 PCM 音频，后端转给浏览器。
+- 前端删除本地 VAD/分段/打断状态机，音量条仅作为麦克风采集观测。
+- 新增 `scripts/realtime-smoke.mjs` 和 `scripts/realtime-bridge-smoke.mjs`。
+- 验证：`npm run smoke:realtime` 返回 transcript/text/audioBytes；`npm run smoke:bridge` 经本地 `/api/realtime` 返回 transcript/text/audioBytes；`npm test`、`npm run build`、`npm run smoke:mock`、`npm run config:check`、`./scripts/harness-check.sh` 均通过。

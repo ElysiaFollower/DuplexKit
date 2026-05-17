@@ -1,5 +1,6 @@
 import path from "node:path";
 import fastifyStatic from "@fastify/static";
+import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
@@ -11,6 +12,7 @@ import { MockAsrProvider, MockLlmProvider, MockTtsProvider } from "./providers/m
 import { OpenAiCompatLlmProvider } from "./providers/openaiCompat.js";
 import { VolcengineFlashAsrProvider } from "./providers/volcengineAsr.js";
 import { VolcengineSseTtsProvider } from "./providers/volcengineTts.js";
+import { attachVolcRealtimeBridge } from "./volcRealtime.js";
 
 export function buildServer(config: AppConfig = loadConfig()) {
   const app = Fastify({
@@ -32,6 +34,25 @@ export function buildServer(config: AppConfig = loadConfig()) {
           tts: realTtsProvider
         }
   );
+
+  app.register(async (routes) => {
+    await routes.register(fastifyWebsocket);
+    routes.route({
+      method: "GET",
+      url: "/api/realtime",
+      handler: async (_request, reply) => {
+        return reply.status(426).send({ error: "WebSocket upgrade required" });
+      },
+      wsHandler: (socket) => {
+        if (config.demoMock) {
+          socket.send(JSON.stringify({ type: "error", message: "Realtime WebSocket is disabled in DEMO_MOCK mode" }));
+          socket.close();
+          return;
+        }
+        attachVolcRealtimeBridge(socket, config.realtime);
+      }
+    });
+  });
 
   app.register(fastifyStatic, {
     root: path.join(process.cwd(), "public"),

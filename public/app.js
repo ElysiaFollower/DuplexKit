@@ -9,31 +9,17 @@ const modeHintEl = document.querySelector("#modeHint");
 const floatingLevelEl = document.querySelector("#floatingLevel");
 const floatingLevelTextEl = document.querySelector("#floatingLevelText");
 
-const sessionId = crypto.randomUUID();
 let audioContext;
 let source;
 let processor;
 let mediaStream;
+let socket;
 let running = false;
-let speaking = false;
-let segment = [];
-let preRoll = [];
-let silenceMs = 0;
-let currentAudio = null;
-let calibrated = false;
-let noiseSamples = [];
-let noiseFloor = 0;
-let activeThreshold = 0.018;
-let hotMs = 0;
+let playbackAt = 0;
+let currentYou;
+let currentAssistant;
 
-const sampleRate = 16000;
-const frameMs = 2048 / 48000 * 1000;
-const vadThreshold = 0.018;
-const calibrationMs = 1200;
-const speechStartMs = 180;
-const silenceToSubmitMs = 850;
-const minSpeechMs = 280;
-let speechMs = 0;
+const upstreamSampleRate = 24000;
 
 startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
@@ -46,7 +32,7 @@ async function checkHealth() {
     const response = await fetch("/api/health");
     const data = await response.json();
     const missing = data.config?.missing || [];
-    healthEl.textContent = missing.length ? `missing: ${missing.join(", ")}` : "ready; Web Audio VAD";
+    healthEl.textContent = missing.length ? `missing: ${missing.join(", ")}` : "ready; native realtime";
   } catch (error) {
     healthEl.textContent = `health failed: ${error.message}`;
   }
@@ -56,28 +42,55 @@ async function start() {
   setState("starting");
   startBtn.disabled = true;
   stopBtn.disabled = false;
-  await startAudioVad().catch((error) => showStartError(error));
+  try {
+    await startAudio();
+    await connectRealtime();
+  } catch (error) {
+    showStartError(error);
+  }
 }
 
-async function startAudioVad() {
+async function startAudio() {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("This browser does not expose microphone capture. Try Chrome/Safari outside the in-app browser.");
   }
-  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    }
+  });
   audioContext = new AudioContext();
+  await audioContext.resume();
+  playbackAt = audioContext.currentTime;
   source = audioContext.createMediaStreamSource(mediaStream);
   processor = audioContext.createScriptProcessor(2048, 1, 1);
   processor.onaudioprocess = onAudio;
   source.connect(processor);
   processor.connect(audioContext.destination);
   running = true;
-  calibrated = false;
-  noiseSamples = [];
-  noiseFloor = 0;
-  activeThreshold = vadThreshold;
-  hotMs = 0;
-  modeHintEl.textContent = "Calibrating room noise. Stay quiet for about 1 second.";
-  setState("calibrating-noise");
+}
+
+function connectRealtime() {
+  return new Promise((resolve, reject) => {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    socket = new WebSocket(`${protocol}//${location.host}/api/realtime`);
+    socket.binaryType = "arraybuffer";
+    socket.addEventListener("open", () => {
+      modeHintEl.textContent = "Native realtime connected. Speak naturally.";
+      setState("connected");
+      resolve();
+    });
+    socket.addEventListener("message", handleRealtimeMessage);
+    socket.addEventListener("error", () => reject(new Error("Realtime WebSocket failed")));
+    socket.addEventListener("close", () => {
+      if (running) {
+        appendTurn("Error", "Realtime WebSocket closed", true);
+        stop();
+      }
+    });
+  });
 }
 
 function showStartError(error) {
@@ -90,6 +103,9 @@ function showStartError(error) {
 
 function stop() {
   running = false;
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
+  socket?.close();
+  socket = null;
   processor?.disconnect();
   source?.disconnect();
   mediaStream?.getTracks().forEach((track) => track.stop());
@@ -98,9 +114,9 @@ function stop() {
   mediaStream = null;
   audioContext?.close().catch(() => {});
   audioContext = null;
+  currentYou = null;
+  currentAssistant = null;
   modeHintEl.textContent = "";
-  stopPlayback("stopped");
-  resetBuffers();
   resetFloatingMeter();
   startBtn.disabled = false;
   stopBtn.disabled = true;
@@ -113,61 +129,19 @@ function resetFloatingMeter() {
   floatingLevelTextEl.textContent = "0%";
 }
 
-async function reset() {
-  await fetch(`/api/session/${sessionId}/reset`, { method: "POST" }).catch(() => {});
+function reset() {
   logEl.innerHTML = "";
+  currentYou = null;
+  currentAssistant = null;
 }
 
 function onAudio(event) {
-  if (!running) return;
+  if (!running || socket?.readyState !== WebSocket.OPEN || !audioContext) return;
   const input = event.inputBuffer.getChannelData(0);
   const rms = Math.sqrt(input.reduce((sum, value) => sum + value * value, 0) / input.length);
   updateMeters(rms);
-
-  if (!calibrated) {
-    noiseSamples.push(rms);
-    if (noiseSamples.length * frameMs >= calibrationMs) {
-      const sorted = [...noiseSamples].sort((a, b) => a - b);
-      noiseFloor = sorted[Math.floor(sorted.length * 0.7)] || 0;
-      activeThreshold = Math.max(vadThreshold, noiseFloor * 3);
-      calibrated = true;
-      modeHintEl.textContent = `Web Audio VAD: threshold ${(activeThreshold * 100).toFixed(1)}%, noise floor ${(noiseFloor * 100).toFixed(1)}%. Speak, then pause.`;
-      setState("listening");
-    }
-    return;
-  }
-
-  const downsampled = downsample(input, audioContext.sampleRate, sampleRate);
-
-  preRoll.push(downsampled);
-  if (preRoll.length > 8) preRoll.shift();
-
-  if (rms > activeThreshold) {
-    hotMs += frameMs;
-    if (currentAudio && hotMs >= speechStartMs) stopPlayback("interrupted");
-    if (!speaking && hotMs >= speechStartMs) {
-      speaking = true;
-      segment = [...preRoll];
-      speechMs = 0;
-      setState("recording");
-    }
-    if (speaking) segment.push(downsampled);
-    silenceMs = 0;
-    if (speaking) speechMs += frameMs;
-    return;
-  }
-
-  hotMs = 0;
-  if (speaking) {
-    segment.push(downsampled);
-    silenceMs += frameMs;
-    if (silenceMs >= silenceToSubmitMs) {
-      const captured = flatten(segment);
-      const longEnough = speechMs >= minSpeechMs;
-      resetBuffers();
-      if (longEnough) submitAudio(captured);
-    }
-  }
+  const downsampled = downsample(input, audioContext.sampleRate, upstreamSampleRate);
+  socket.send(floatToInt16Buffer(downsampled));
 }
 
 function updateMeters(rms) {
@@ -178,63 +152,55 @@ function updateMeters(rms) {
   floatingLevelTextEl.textContent = `${percent}%`;
 }
 
-async function submitAudio(samples) {
-  setState("uploading");
-  try {
-    const wav = encodeWav(samples, sampleRate);
-    const audioBase64 = arrayBufferToBase64(wav);
-    setState("thinking");
-    const response = await fetch("/api/turn", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId,
-        clientTurnId: crypto.randomUUID(),
-        mimeType: "audio/wav",
-        audioBase64
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
-    appendTurn("You", data.transcript);
-    appendTurn("Assistant", data.reply);
-    playAudio(data.audio.audioBase64, data.audio.mimeType);
-  } catch (error) {
-    appendTurn("Error", error.message, true);
-    setState("listening");
+async function handleRealtimeMessage(event) {
+  if (typeof event.data !== "string") {
+    const bytes = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
+    playPcm(bytes);
+    return;
   }
+  const message = JSON.parse(event.data);
+  if (message.type === "status") setState(message.state);
+  if (message.type === "error") {
+    appendTurn("Error", message.message, true);
+    setState("error");
+  }
+  if (message.type === "asr_start") setState("listening");
+  if (message.type === "transcript") updateYou(message.text);
+  if (message.type === "asr_end") setState("thinking");
+  if (message.type === "tts_start") {
+    setState("speaking");
+    ensureAssistant();
+  }
+  if (message.type === "assistant_text") updateAssistant(message.text);
+  if (message.type === "tts_end" || message.type === "llm_end") setState("listening");
 }
 
-function playAudio(base64, mimeType) {
-  stopPlayback("interrupted");
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-  currentAudio = new Audio(url);
-  currentAudio.onended = () => {
-    URL.revokeObjectURL(url);
-    currentAudio = null;
-    setState("listening");
-  };
-  currentAudio.play();
-  setState("speaking");
+function playPcm(arrayBuffer) {
+  if (!audioContext || arrayBuffer.byteLength === 0) return;
+  const input = new Int16Array(arrayBuffer);
+  const buffer = audioContext.createBuffer(1, input.length, upstreamSampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < input.length; i += 1) channel[i] = input[i] / 32768;
+  const node = audioContext.createBufferSource();
+  node.buffer = buffer;
+  node.connect(audioContext.destination);
+  const startAt = Math.max(audioContext.currentTime + 0.02, playbackAt);
+  node.start(startAt);
+  playbackAt = startAt + buffer.duration;
 }
 
-function stopPlayback(reason) {
-  if (!currentAudio) return;
-  currentAudio.pause();
-  currentAudio.currentTime = 0;
-  currentAudio = null;
-  setState(reason);
+function updateYou(text) {
+  if (!currentYou) currentYou = appendTurn("You", "");
+  currentYou.querySelector("div").textContent = text;
 }
 
-function resetBuffers() {
-  speaking = false;
-  segment = [];
-  silenceMs = 0;
-  speechMs = 0;
-  hotMs = 0;
+function ensureAssistant() {
+  if (!currentAssistant) currentAssistant = appendTurn("Assistant", "");
+  return currentAssistant;
+}
+
+function updateAssistant(text) {
+  ensureAssistant().querySelector("div").textContent = text;
 }
 
 function setState(value) {
@@ -248,6 +214,7 @@ function appendTurn(role, text, error = false) {
   item.querySelector("strong").textContent = role;
   item.querySelector("div").textContent = text;
   logEl.prepend(item);
+  return item;
 }
 
 function downsample(input, inRate, outRate) {
@@ -255,55 +222,18 @@ function downsample(input, inRate, outRate) {
   const ratio = inRate / outRate;
   const length = Math.floor(input.length / ratio);
   const output = new Float32Array(length);
-  for (let i = 0; i < length; i += 1) {
-    output[i] = input[Math.floor(i * ratio)];
-  }
+  for (let i = 0; i < length; i += 1) output[i] = input[Math.floor(i * ratio)];
   return output;
 }
 
-function flatten(chunks) {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const output = new Float32Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return output;
-}
-
-function encodeWav(samples, rate) {
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
+function floatToInt16Buffer(samples) {
+  const buffer = new ArrayBuffer(samples.length * 2);
   const view = new DataView(buffer);
-  writeString(view, 0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeString(view, 8, "WAVE");
-  writeString(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(view, 36, "data");
-  view.setUint32(40, samples.length * 2, true);
-  let offset = 44;
+  let offset = 0;
   for (const sample of samples) {
     const value = Math.max(-1, Math.min(1, sample));
     view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true);
     offset += 2;
   }
   return buffer;
-}
-
-function writeString(view, offset, text) {
-  for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
-}
-
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }

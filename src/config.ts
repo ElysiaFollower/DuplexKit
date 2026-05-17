@@ -21,11 +21,21 @@ const RawEnv = z.object({
   VOLCENGINE_API_KEY: z.string().optional(),
   VOLCENGINE_ASR_ENDPOINT: z
     .string()
-    .default("https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"),
+    .default("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"),
   VOLCENGINE_ASR_API_KEY: z.string().optional(),
   VOLCENGINE_ASR_APP_KEY: z.string().optional(),
   VOLCENGINE_ASR_ACCESS_KEY: z.string().optional(),
-  VOLCENGINE_ASR_RESOURCE_ID: z.string().default("volc.bigasr.auc_turbo"),
+  VOLCENGINE_ASR_RESOURCE_ID: z.string().default("volc.seedasr.sauc.duration"),
+
+  VOLCENGINE_REALTIME_ENDPOINT: z
+    .string()
+    .default("wss://openspeech.bytedance.com/api/v3/realtime/dialogue"),
+  VOLCENGINE_REALTIME_APP_ID: z.string().optional(),
+  VOLCENGINE_REALTIME_ACCESS_TOKEN: z.string().optional(),
+  VOLCENGINE_REALTIME_RESOURCE_ID: z.string().default("volc.speech.dialog"),
+  VOLCENGINE_REALTIME_APP_KEY: z.string().default("PlgvMymc7f3tQnJ6"),
+  VOLCENGINE_REALTIME_SPEAKER: z.string().default("zh_female_vv_jupiter_bigtts"),
+  VOLCENGINE_REALTIME_SAMPLE_RATE: z.coerce.number().int().positive().default(24000),
 
   VOLCENGINE_TTS_ENDPOINT: z
     .string()
@@ -51,6 +61,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const asrApiKey = parsed.VOLCENGINE_ASR_API_KEY || "";
   const asrAppKey = parsed.VOLCENGINE_ASR_APP_KEY || parsed.APP_ID || "";
   const asrAccessKey = parsed.VOLCENGINE_ASR_ACCESS_KEY || parsed.ACCESS_TOKEN || "";
+  const realtimeAppId = parsed.VOLCENGINE_REALTIME_APP_ID || parsed.APP_ID || "";
+  const realtimeAccessToken = parsed.VOLCENGINE_REALTIME_ACCESS_TOKEN || parsed.ACCESS_TOKEN || "";
   const ttsAppId = parsed.VOLCENGINE_TTS_APP_ID || parsed.APP_ID || "";
   const ttsAccessKey = parsed.VOLCENGINE_TTS_ACCESS_KEY || parsed.ACCESS_TOKEN || "";
   const ttsApiKey = parsed.VOLCENGINE_TTS_API_KEY || "";
@@ -72,6 +84,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       accessKey: asrAccessKey,
       resourceId: parsed.VOLCENGINE_ASR_RESOURCE_ID
     },
+    realtime: {
+      endpoint: parsed.VOLCENGINE_REALTIME_ENDPOINT,
+      appId: realtimeAppId,
+      accessToken: realtimeAccessToken,
+      resourceId: parsed.VOLCENGINE_REALTIME_RESOURCE_ID,
+      appKey: parsed.VOLCENGINE_REALTIME_APP_KEY,
+      speaker: parsed.VOLCENGINE_REALTIME_SPEAKER,
+      sampleRate: parsed.VOLCENGINE_REALTIME_SAMPLE_RATE
+    },
     tts: {
       endpoint: parsed.VOLCENGINE_TTS_ENDPOINT,
       apiKey: ttsApiKey,
@@ -89,11 +110,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
 export function getConfigStatus(config: AppConfig) {
   const missing: string[] = [];
   if (!config.demoMock) {
-    if (!config.llm.apiKey) missing.push("LLM_API_KEY or DEEPSEEK_API_KEY");
-    if (!config.asr.apiKey && !config.asr.appKey) missing.push("VOLCENGINE_ASR_API_KEY or APP_ID");
-    if (!config.tts.apiKey && !(config.tts.appId && config.tts.accessKey)) {
-      missing.push("VOLCENGINE_TTS_API_KEY or APP_ID + ACCESS_TOKEN");
-    }
+    if (!config.realtime.appId) missing.push("VOLCENGINE_REALTIME_APP_ID or APP_ID");
+    if (!config.realtime.accessToken) missing.push("VOLCENGINE_REALTIME_ACCESS_TOKEN or ACCESS_TOKEN");
   }
   return {
     ok: missing.length === 0,
@@ -109,6 +127,13 @@ export function getConfigStatus(config: AppConfig) {
       resourceId: config.asr.resourceId,
       authMode: config.asr.apiKey ? "api-key" : config.asr.appKey ? "app-token" : "missing",
       configured: Boolean(config.asr.apiKey || config.asr.appKey)
+    },
+    realtime: {
+      endpoint: config.realtime.endpoint,
+      resourceId: config.realtime.resourceId,
+      speaker: config.realtime.speaker,
+      sampleRate: config.realtime.sampleRate,
+      configured: Boolean(config.realtime.appId && config.realtime.accessToken)
     },
     tts: {
       endpoint: config.tts.endpoint,
