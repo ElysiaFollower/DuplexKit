@@ -53,6 +53,13 @@
 - 否决方案：把官方 web_agent 当作可复用工具调用方案；让语音模型直接用自然文本/咒语承载底层工具参数。
 - 后续约束：首版每个 `ASREnded` 都调用一次 Planner；工具参数由后端 Planner 生成并做 schema 校验；参数不足时 Planner 必须主动澄清，不猜测执行；咒语只作为交互层候选；demo 承认纯文本 Planner 不理解声色、韵律和声纹身份。
 
+### 2026-05-17 - 工具调用必须有生命周期和结果投递门控
+
+- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；先通过 `502 ChatRAGText` 注入 `tool_started` 反馈，工具完成后只有仍 active 才注入 `tool_result`。
+- 原因：工具可能耗时，用户需要即时反馈；等待期间用户可能打断或改变意图，旧结果不能乱播。
+- 否决方案：只在工具完成后注入最终结果；不记录工具调用 ID；用户打断后仍无条件播报旧结果。
+- 后续约束：running tool 被用户打断后标记为 possibly superseded，最终是否投递结果由 Planner 基于新 transcript、`tool_call_id` 和 turn 状态决定。
+
 ### 2026-05-17 - 用户插话由 ASRInfo 立即停播并重规划
 
 - 决策：收到 `450 ASRInfo` 后前端立即停止当前播放并丢弃旧音频队列；首版先信任火山原生全双工会基于插话调整后续输出，只做 raw event 观测，详见 `docs/adr/2026-05-17-interruption-and-replanning.md`。

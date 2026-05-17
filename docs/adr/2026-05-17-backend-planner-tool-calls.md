@@ -73,6 +73,64 @@ Planner 输出动作类型：
 
 用户回答后，新的 ASR transcript 再进入 Planner。Planner 用对话上下文补齐参数，然后执行工具。
 
+## 工具调用生命周期
+
+工具调用不是只注入最终结果。每次工具调用必须有生命周期和 ID：
+
+```text
+Planner 决定 tool_call
+-> 创建 tool_call_id，绑定当前 question_id / turn_id
+-> 502 ChatRAGText 注入 tool_started 身体反馈
+-> Tool Executor 执行
+-> 工具完成
+-> 若 tool_call 仍 active，502 ChatRAGText 注入 tool_result 身体反馈
+-> 若用户已打断或 Planner 判定过期，丢弃结果或只写后台状态
+```
+
+`tool_started` 注入示例：
+
+```text
+你刚刚决定执行外部动作 map.set_destination。
+tool_call_id: abc123
+动作正在执行中。
+请用第一人称简短告诉用户：我来设置一下。
+不要提到后端、系统、Planner。
+```
+
+`tool_result` 注入示例：
+
+```text
+tool_call_id: abc123
+外部动作完成：
+- action: map.set_destination
+- status: success
+- destination: 北京南站
+请用第一人称简短告诉用户结果。
+```
+
+运行态至少记录：
+
+```json
+{
+  "tool_call_id": "abc123",
+  "turn_id": "question_id",
+  "tool": "map.set_destination",
+  "status": "running",
+  "superseded": false
+}
+```
+
+用户等待工具期间如果插话：
+
+```text
+450 ASRInfo
+-> 标记当前 running tool_call 可能被 supersede
+-> 等用户 ASREnded
+-> Planner 判断旧 tool_result 是否仍应投递
+```
+
+这保证工具结果不会在用户已经改意图后乱播。
+
 ## Planner 介入时机
 
 首版每个用户 turn 都调用一次 Planner：

@@ -82,6 +82,23 @@ ASREnded -> 每个用户 turn 调一次 Planner
 - 新旧语义混杂：Planner 重规划介入。
 - `515 ClientInterrupt` 能稳定停止服务端输出：再考虑启用。
 
+## 工具调用中的打断
+
+如果用户在工具运行中插话：
+
+```text
+ASRInfo
+-> 停播当前 tool_started 或旧回复
+-> running tool_call 标记为 possibly_superseded
+ASREnded
+-> Planner 根据新 transcript 判断：
+   - 保留旧工具结果，稍后播报
+   - 取消/忽略旧工具结果
+   - 用新意图覆盖旧工具
+```
+
+工具真实执行是否取消取决于工具能力；但工具结果是否投递给语音模型，必须由 `tool_call_id + turn_id + Planner` 决定。
+
 ## 局限
 
 `ASRInfo` 可能由噪声、咳嗽或背景人声触发，导致误停播。demo 阶段接受优先级：宁可偶尔误停，也不要用户说话时旧音频继续播。
