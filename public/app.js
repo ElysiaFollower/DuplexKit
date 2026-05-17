@@ -333,8 +333,12 @@ async function handleRealtimeMessage(event) {
     ensureAssistant();
   }
   if (message.type === "assistant_text") {
-    updateAssistant(message.text);
-    addFlow("assistant_text", { text: message.text });
+    if (message.append) {
+      appendAssistantTurn(message.text);
+    } else {
+      updateAssistant(message.text);
+    }
+    addFlow("assistant_text", { text: message.text, source: message.source, append: message.append });
   }
   if (message.type === "tts_end" || message.type === "llm_end") setState("listening");
   if (message.type === "planner") {
@@ -408,6 +412,11 @@ function ensureAssistant() {
 
 function updateAssistant(text) {
   updateTurnText(ensureAssistant(), text);
+}
+
+function appendAssistantTurn(text) {
+  currentAssistant = appendTurn("Assistant", text);
+  return currentAssistant;
 }
 
 function setState(value) {

@@ -192,6 +192,7 @@ class VolcRealtimeBridge {
 
     if (parsed.event === events.asrStart) {
       this.latestTranscript = "";
+      this.text = "";
       this.currentQuestionId = extractId(parsed.payload, "question_id") || crypto.randomUUID();
       this.suppressDefaultReply = false;
       this.currentAudioAllowed = true;
@@ -246,7 +247,7 @@ class VolcRealtimeBridge {
     if (decision.action === "ask_clarification") {
       this.suppressDefaultReply = true;
       this.currentAudioAllowed = false;
-      this.sendChatTtsText(decision.question);
+      this.sendChatTtsText(decision.question, "ask_clarification");
       this.sendJson({ type: "tool", phase: "clarification", prompt: clarificationPrompt(decision) });
       return;
     }
@@ -258,7 +259,7 @@ class VolcRealtimeBridge {
     const call = this.tools.start(turnId, decision);
     this.sendJson({ type: "tool", phase: "started", call });
     this.sendJson({ type: "tool", phase: "started_prompt", prompt: toolStartedPrompt(call, decision.spoken) });
-    this.sendChatTtsText(decision.spoken);
+    this.sendChatTtsText(decision.spoken, "tool_started");
 
     const result = await this.tools.execute(call.toolCallId);
     if (!result) {
@@ -268,7 +269,7 @@ class VolcRealtimeBridge {
 
     this.sendJson({ type: "tool", phase: "result", result });
     this.sendJson({ type: "tool", phase: "result_prompt", prompt: toolResultPrompt(result) });
-    this.sendChatTtsText(`好了，${result.summary}。`);
+    this.sendChatTtsText(`好了，${result.summary}。`, "tool_result");
   }
 
   private sendChatRagText(externalRag: string) {
@@ -276,8 +277,9 @@ class VolcRealtimeBridge {
     this.upstream.send(packet(events.chatRagText, { external_rag: externalRag }, this.sessionId));
   }
 
-  private sendChatTtsText(content: string) {
+  private sendChatTtsText(content: string, source = "server_chat_tts") {
     if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
+    this.sendJson({ type: "assistant_text", text: content, source, append: true });
     this.upstream.send(packet(events.chatTtsText, { start: true, content, end: true }, this.sessionId));
   }
 
