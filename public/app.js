@@ -15,9 +15,17 @@ const saveSettingsBtn = document.querySelector("#saveSettingsBtn");
 const flowLogEl = document.querySelector("#flowLog");
 const clearFlowBtn = document.querySelector("#clearFlowBtn");
 const clearDialogueBtn = document.querySelector("#clearDialogueBtn");
+const saveSessionBtn = document.querySelector("#saveSessionBtn");
+const saveSessionStatusEl = document.querySelector("#saveSessionStatus");
 const toolsPanelEl = document.querySelector("#toolsPanel");
 const protocolNotesEl = document.querySelector("#protocolNotes");
 
+const pageCreatedAt = new Date().toISOString();
+const dialogueEntries = [];
+const flowEntries = [];
+const turnEntries = new WeakMap();
+let runtimeSettingsSnapshot;
+let toolRegistrySnapshot;
 let audioContext;
 let source;
 let processor;
@@ -37,8 +45,10 @@ resetBtn.addEventListener("click", reset);
 saveSettingsBtn.addEventListener("click", saveRuntimeSettings);
 clearFlowBtn.addEventListener("click", () => {
   flowLogEl.innerHTML = "";
+  flowEntries.length = 0;
 });
 clearDialogueBtn.addEventListener("click", resetDialogue);
+saveSessionBtn.addEventListener("click", saveSessionLog);
 
 checkHealth();
 loadRuntimeSettings();
@@ -59,6 +69,7 @@ async function loadRuntimeSettings() {
   try {
     const response = await fetch("/api/runtime-settings");
     const data = await response.json();
+    runtimeSettingsSnapshot = data;
     systemRoleInput.value = data.settings?.systemRole || "";
     speakingStyleInput.value = data.settings?.speakingStyle || "";
     settingsStatusEl.textContent = data.note || "Changes apply to next Start.";
@@ -82,6 +93,7 @@ async function saveRuntimeSettings() {
     return;
   }
   const data = await response.json();
+  runtimeSettingsSnapshot = data;
   systemRoleInput.value = data.settings.systemRole;
   speakingStyleInput.value = data.settings.speakingStyle;
   settingsStatusEl.textContent = "saved; next Start uses it";
@@ -91,6 +103,7 @@ async function loadToolRegistry() {
   try {
     const response = await fetch("/api/tools");
     const data = await response.json();
+    toolRegistrySnapshot = data;
     renderTools(data);
   } catch (error) {
     toolsPanelEl.textContent = `tools failed: ${error.message}`;
@@ -118,6 +131,48 @@ function renderTools(data) {
     row.textContent = `${template.name} · ${template.channel} · ${template.purpose}`;
     protocolNotesEl.appendChild(row);
   }
+}
+
+async function saveSessionLog() {
+  saveSessionBtn.disabled = true;
+  saveSessionStatusEl.textContent = "saving";
+  try {
+    const response = await fetch("/api/session-logs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(collectSessionLog())
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `save failed: ${response.status}`);
+    saveSessionStatusEl.textContent = `saved: ${data.filename}`;
+    addFlow("session_log_saved", data);
+  } catch (error) {
+    saveSessionStatusEl.textContent = `save failed: ${error.message}`;
+  } finally {
+    saveSessionBtn.disabled = false;
+  }
+}
+
+function collectSessionLog() {
+  return {
+    clientCreatedAt: pageCreatedAt,
+    savedAtClient: new Date().toISOString(),
+    url: location.href,
+    userAgent: navigator.userAgent,
+    state: stateEl.textContent,
+    health: healthEl.textContent,
+    modeHint: modeHintEl.textContent,
+    runtimeSettings: {
+      loaded: runtimeSettingsSnapshot,
+      editor: {
+        systemRole: systemRoleInput.value,
+        speakingStyle: speakingStyleInput.value
+      }
+    },
+    tools: toolRegistrySnapshot,
+    dialogue: dialogueEntries,
+    flow: flowEntries
+  };
 }
 
 async function start() {
@@ -219,6 +274,7 @@ function reset() {
 
 function resetDialogue() {
   dialogueLogEl.innerHTML = "";
+  dialogueEntries.length = 0;
   currentYou = null;
   currentAssistant = null;
 }
@@ -254,6 +310,8 @@ async function handleRealtimeMessage(event) {
   }
   if (message.type === "asr_start") {
     clearPlayback();
+    currentYou = null;
+    currentAssistant = null;
     addFlow("interrupt", { questionId: message.questionId });
     setState("listening");
   }
@@ -292,9 +350,17 @@ async function handleRealtimeMessage(event) {
 }
 
 function addFlow(kind, payload) {
+  const entry = {
+    at: new Date().toISOString(),
+    kind,
+    payload
+  };
+  flowEntries.push(entry);
+  while (flowEntries.length > 500) flowEntries.shift();
+
   const item = document.createElement("div");
   item.className = "flow-item";
-  const time = new Date().toLocaleTimeString();
+  const time = new Date(entry.at).toLocaleTimeString();
   item.innerHTML = `<strong></strong><pre></pre>`;
   item.querySelector("strong").textContent = `${time} ${kind}`;
   item.querySelector("pre").textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
@@ -332,7 +398,7 @@ function clearPlayback() {
 
 function updateYou(text) {
   if (!currentYou) currentYou = appendTurn("You", "");
-  currentYou.querySelector("div").textContent = text;
+  updateTurnText(currentYou, text);
 }
 
 function ensureAssistant() {
@@ -341,7 +407,7 @@ function ensureAssistant() {
 }
 
 function updateAssistant(text) {
-  ensureAssistant().querySelector("div").textContent = text;
+  updateTurnText(ensureAssistant(), text);
 }
 
 function setState(value) {
@@ -349,13 +415,34 @@ function setState(value) {
 }
 
 function appendTurn(role, text, error = false) {
+  const entry = {
+    id: newTurnId(),
+    at: new Date().toISOString(),
+    role,
+    text,
+    error
+  };
+  dialogueEntries.push(entry);
+
   const item = document.createElement("article");
   item.className = `turn${error ? " error" : ""}`;
   item.innerHTML = `<strong></strong><div></div>`;
   item.querySelector("strong").textContent = role;
   item.querySelector("div").textContent = text;
+  turnEntries.set(item, entry);
   dialogueLogEl.prepend(item);
   return item;
+}
+
+function updateTurnText(item, text) {
+  item.querySelector("div").textContent = text;
+  const entry = turnEntries.get(item);
+  if (entry) entry.text = text;
+}
+
+function newTurnId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function downsample(input, inRate, outRate) {

@@ -4,13 +4,14 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
 import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
 import { getRuntimeSettings, updateRuntimeSettings } from "./runtimeSettings.js";
+import { saveSessionLog, SessionLogPayload } from "./sessionLogs.js";
 import { TOOL_DEFINITIONS, TOOL_PROMPT_TEMPLATES } from "./toolPlanner.js";
 import { attachVolcRealtimeBridge } from "./volcRealtime.js";
 
 export function buildServer(config: AppConfig = loadConfig()) {
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
-    bodyLimit: 2 * 1024 * 1024
+    bodyLimit: 10 * 1024 * 1024
   });
 
   app.register(async (routes) => {
@@ -50,6 +51,16 @@ export function buildServer(config: AppConfig = loadConfig()) {
     tools: TOOL_DEFINITIONS,
     promptTemplates: TOOL_PROMPT_TEMPLATES
   }));
+
+  app.post("/api/session-logs", async (request, reply) => {
+    const parsed = SessionLogPayload.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid session log payload", issues: parsed.error.issues });
+    }
+
+    const saved = await saveSessionLog(parsed.data);
+    return reply.status(201).send(saved);
+  });
 
   return app;
 }

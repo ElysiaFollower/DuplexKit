@@ -65,8 +65,12 @@
         <article class="panel">
           <div class="panel__head">
             <strong>Session flow</strong>
-            <button id="clearFlowBtn" type="button">Clear</button>
+            <div class="panel-actions">
+              <button id="saveSessionBtn" type="button">Save log</button>
+              <button id="clearFlowBtn" type="button">Clear</button>
+            </div>
           </div>
+          <p id="saveSessionStatus" class="panel-note">Save writes Dialogue + Session flow + metadata.</p>
           <div id="flowLog" class="flow-log"></div>
         </article>
 

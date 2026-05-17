@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { readFile, rm } from "node:fs/promises";
 import { loadConfig } from "../src/config.js";
 import { buildServer } from "../src/server.js";
 
@@ -74,5 +75,31 @@ describe("server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().tools.map((tool: { name: string }) => tool.name)).toContain("map.open");
     expect(response.json().promptTemplates.length).toBeGreaterThan(0);
+  });
+
+  it("saves structured session logs inside the repo", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/session-logs",
+      payload: {
+        dialogue: [{ id: "turn-1", at: "2026-05-17T00:00:00.000Z", role: "You", text: "打开地图" }],
+        flow: [{ at: "2026-05-17T00:00:01.000Z", kind: "tool", payload: { phase: "started" } }]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const saved = response.json();
+    expect(saved.filename).toMatch(/\.json$/);
+    expect(saved.path).toContain("/logs/session/");
+
+    const file = JSON.parse(await readFile(saved.path, "utf8"));
+    expect(file.schemaVersion).toBe(1);
+    expect(file.payload.dialogue[0].text).toBe("打开地图");
+    expect(file.payload.flow[0].payload.phase).toBe("started");
+
+    await rm(saved.path, { force: true });
   });
 });

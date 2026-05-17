@@ -152,6 +152,11 @@ meter {
   margin-bottom: 10px;
 }
 
+.panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .stacked {
   display: grid;
   grid-template-columns: 1fr;
