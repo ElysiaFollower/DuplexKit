@@ -51,7 +51,7 @@
 - 决策：工具调用主路线采用 `ASR transcript -> 后端 Planner LLM -> Tool Executor -> 502 ChatRAGText 身体反馈 -> realtime 播报`，详见 `docs/adr/2026-05-17-backend-planner-tool-calls.md`。
 - 原因：火山没有公开通用 tool call 事件；官方 web_agent 不能调用我们的服务；external_rag 可作为稳定结果注入通道。
 - 否决方案：把官方 web_agent 当作可复用工具调用方案；让语音模型直接用自然文本/咒语承载底层工具参数。
-- 后续约束：工具参数由后端 Planner 生成并做 schema 校验；参数不足时 Planner 必须主动澄清，不猜测执行；咒语只作为交互层候选；demo 承认纯文本 Planner 不理解声色、韵律和声纹身份。
+- 后续约束：首版每个 `ASREnded` 都调用一次 Planner；工具参数由后端 Planner 生成并做 schema 校验；参数不足时 Planner 必须主动澄清，不猜测执行；咒语只作为交互层候选；demo 承认纯文本 Planner 不理解声色、韵律和声纹身份。
 
 ### 2026-05-17 - 用户插话由 ASRInfo 立即停播并重规划
 

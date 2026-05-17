@@ -73,6 +73,26 @@ Planner 输出动作类型：
 
 用户回答后，新的 ASR transcript 再进入 Planner。Planner 用对话上下文补齐参数，然后执行工具。
 
+## Planner 介入时机
+
+首版每个用户 turn 都调用一次 Planner：
+
+```text
+459 ASREnded
+-> Planner
+-> tool_call / ask_clarification / no_action / interruption action
+```
+
+原因：demo 优先可靠性和可调试性。Planner 可以输出 `no_action`，表示交给火山 realtime 正常闲聊/回复。
+
+后续如果成本或延迟不可接受，再加 cheap filter：
+
+```text
+ASREnded
+-> 规则/小模型判断是否可能工具意图
+-> 可能是工具才调用 Planner
+```
+
 ## 为什么不是让语音模型直接调用工具
 
 - 火山没有公开稳定的 tool call 事件。
