@@ -3,7 +3,7 @@ const stopBtn = document.querySelector("#stopBtn");
 const resetBtn = document.querySelector("#resetBtn");
 const stateEl = document.querySelector("#state");
 const levelEl = document.querySelector("#level");
-const logEl = document.querySelector("#log");
+const dialogueLogEl = document.querySelector("#dialogueLog");
 const healthEl = document.querySelector("#health");
 const modeHintEl = document.querySelector("#modeHint");
 const floatingLevelEl = document.querySelector("#floatingLevel");
@@ -14,7 +14,9 @@ const settingsStatusEl = document.querySelector("#settingsStatus");
 const saveSettingsBtn = document.querySelector("#saveSettingsBtn");
 const flowLogEl = document.querySelector("#flowLog");
 const clearFlowBtn = document.querySelector("#clearFlowBtn");
+const clearDialogueBtn = document.querySelector("#clearDialogueBtn");
 const toolsPanelEl = document.querySelector("#toolsPanel");
+const protocolNotesEl = document.querySelector("#protocolNotes");
 
 let audioContext;
 let source;
@@ -36,6 +38,7 @@ saveSettingsBtn.addEventListener("click", saveRuntimeSettings);
 clearFlowBtn.addEventListener("click", () => {
   flowLogEl.innerHTML = "";
 });
+clearDialogueBtn.addEventListener("click", resetDialogue);
 
 checkHealth();
 loadRuntimeSettings();
@@ -91,11 +94,13 @@ async function loadToolRegistry() {
     renderTools(data);
   } catch (error) {
     toolsPanelEl.textContent = `tools failed: ${error.message}`;
+    protocolNotesEl.textContent = "";
   }
 }
 
 function renderTools(data) {
   toolsPanelEl.innerHTML = "";
+  protocolNotesEl.innerHTML = "";
   for (const tool of data.tools || []) {
     const item = document.createElement("details");
     item.className = "tool-item";
@@ -108,15 +113,11 @@ function renderTools(data) {
     toolsPanelEl.appendChild(item);
   }
 
-  const prompts = document.createElement("section");
-  prompts.className = "prompt-list";
-  prompts.innerHTML = "<strong>Prompt channels</strong>";
   for (const template of data.promptTemplates || []) {
     const row = document.createElement("p");
     row.textContent = `${template.name} · ${template.channel} · ${template.purpose}`;
-    prompts.appendChild(row);
+    protocolNotesEl.appendChild(row);
   }
-  toolsPanelEl.appendChild(prompts);
 }
 
 async function start() {
@@ -158,7 +159,7 @@ function connectRealtime() {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     socket = new WebSocket(`${protocol}//${location.host}/api/realtime`);
     socket.binaryType = "arraybuffer";
-  socket.addEventListener("open", () => {
+    socket.addEventListener("open", () => {
       modeHintEl.textContent = "Native realtime connected. Speak naturally.";
       addFlow("socket", "open");
       setState("connected");
@@ -213,7 +214,11 @@ function resetFloatingMeter() {
 }
 
 function reset() {
-  logEl.innerHTML = "";
+  resetDialogue();
+}
+
+function resetDialogue() {
+  dialogueLogEl.innerHTML = "";
   currentYou = null;
   currentAssistant = null;
 }
@@ -249,7 +254,6 @@ async function handleRealtimeMessage(event) {
   }
   if (message.type === "asr_start") {
     clearPlayback();
-    appendTurn("Interrupt", "user speech detected; cleared queued playback");
     addFlow("interrupt", { questionId: message.questionId });
     setState("listening");
   }
@@ -263,7 +267,6 @@ async function handleRealtimeMessage(event) {
   }
   if (message.type === "tts_start") {
     if (message.suppressed) {
-      appendTurn("Realtime", `suppressed ${message.ttsType || "default"} reply`);
       addFlow("tts_suppressed", message);
       return;
     }
@@ -277,11 +280,9 @@ async function handleRealtimeMessage(event) {
   }
   if (message.type === "tts_end" || message.type === "llm_end") setState("listening");
   if (message.type === "planner") {
-    appendTurn("Planner", JSON.stringify(message.decision));
     addFlow("planner", { transcript: message.transcript, decision: message.decision });
   }
   if (message.type === "tool") {
-    appendTurn("Tool", JSON.stringify(message));
     addFlow("tool", message);
   }
   if (message.type === "raw_event") {
@@ -353,7 +354,7 @@ function appendTurn(role, text, error = false) {
   item.innerHTML = `<strong></strong><div></div>`;
   item.querySelector("strong").textContent = role;
   item.querySelector("div").textContent = text;
-  logEl.prepend(item);
+  dialogueLogEl.prepend(item);
   return item;
 }
 

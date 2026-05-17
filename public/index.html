@@ -37,6 +37,14 @@
         <span>“导航到我的办公室”</span>
       </section>
 
+      <section class="panel dialogue-panel" aria-label="dialogue history">
+        <div class="panel__head">
+          <strong>Dialogue</strong>
+          <button id="clearDialogueBtn" type="button">Clear</button>
+        </div>
+        <section class="transcript transcript--clean" id="dialogueLog"></section>
+      </section>
+
       <section class="debug-grid" aria-label="debug panels">
         <article class="panel">
           <div class="panel__head">
@@ -67,10 +75,12 @@
             <strong>Tool registry</strong>
           </div>
           <div id="toolsPanel" class="tools-panel"></div>
+          <details class="protocol-notes">
+            <summary>Protocol notes</summary>
+            <div id="protocolNotes"></div>
+          </details>
         </article>
       </section>
-
-      <section class="transcript" id="log"></section>
     </main>
     <aside class="floating-meter" aria-label="microphone monitor">
       <div class="floating-meter__label">Mic monitor</div>

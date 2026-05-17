@@ -121,6 +121,10 @@ meter {
   color: #171717;
 }
 
+.dialogue-panel {
+  margin: 0 0 18px;
+}
+
 .debug-grid {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.2fr);
@@ -166,7 +170,7 @@ textarea {
 
 .panel-note,
 .tool-item p,
-.prompt-list p {
+.protocol-notes p {
   color: #5f6673;
   font-size: 13px;
 }
@@ -205,25 +209,38 @@ pre {
 }
 
 .tool-item,
-.prompt-list {
+.protocol-notes {
   border: 1px solid #e2e6ed;
   border-radius: 6px;
   padding: 10px;
   background: #fafbfc;
 }
 
-.tool-item summary {
+.tool-item summary,
+.protocol-notes summary {
   cursor: pointer;
   font-weight: 700;
 }
 
-.prompt-list {
-  grid-column: 1 / -1;
+.protocol-notes {
+  margin-top: 10px;
+}
+
+.protocol-notes div {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .transcript {
   display: grid;
   gap: 12px;
+}
+
+.transcript--clean {
+  min-height: 120px;
+  max-height: 360px;
+  overflow: auto;
 }
 
 .turn {
