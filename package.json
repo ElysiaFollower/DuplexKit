@@ -1,7 +1,7 @@
 {
   "name": "duplex",
   "version": "1.0.0",
-  "description": "Effect-level full-duplex voice interaction demo.",
+  "description": "Native realtime full-duplex voice interaction demo.",
   "main": "dist/server.js",
   "directories": {
     "doc": "docs"
@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "smoke:mock": "scripts/mock-smoke.sh",
+    "smoke:local": "scripts/local-smoke.sh",
     "config:check": "node dist/scripts/config-check.js",
     "smoke:realtime": "node scripts/realtime-smoke.mjs",
     "smoke:bridge": "node scripts/realtime-bridge-smoke.mjs"

@@ -1,47 +1,52 @@
 # Duplex Voice Demo
 
-一个原生实时语音全双工 demo。浏览器负责麦克风采集、音量观测和 PCM 播放；后端负责把浏览器 WebSocket 桥接到火山引擎实时语音大模型。
+原生实时语音全双工 demo。唯一主路线：
 
-主路线不再用本地 VAD 判断“说完”或“打断”。用户是否开口、何时结束、是否打断回复，都交给火山 realtime 模型处理。
+`browser mic -> /api/realtime -> Volcengine realtime speech model -> browser audio`
+
+本地不再实现 ASR -> LLM -> TTS 级联路线。用户开口检测、端点检测、回复生成、打断由火山实时语音大模型处理。浏览器音量条只用于观察麦克风采集强度。
 
 ## Quick Start
 
 ```sh
 npm install
 npm run build
-DEMO_MOCK=1 npm start
+npm start
 ```
 
-打开 `http://localhost:5177`。mock 模式不调用外部 API，用来验证浏览器页面和旧 HTTP 调试接口。
+打开 `http://localhost:5177`，点 `Start`，授权麦克风。
 
-真实模式只有一条语音路线：Web Audio 采集麦克风，前端持续发送 24kHz mono PCM 到 `/api/realtime`，后端桥接 `wss://openspeech.bytedance.com/api/v3/realtime/dialogue`。默认 resource id 是 `volc.speech.dialog`。
-
-无人值守 smoke：
+开发模式：
 
 ```sh
-npm run smoke:mock
-npm run smoke:realtime
-npm run smoke:bridge
-```
-
-真实 API 模式：
-
-```sh
-cp .env.example .env
-# 填写 LLM 和火山语音变量后：
 npm run dev
 ```
 
-当前已从 `/Users/ely/workspace/research/agent/DreamingRAG/.env` 复制真实 `.env` 到本仓库本地文件。该文件被 `.gitignore` 排除，不会提交。
-
 ## Required API Variables
 
-- `APP_ID` / `ACCESS_TOKEN`：实时语音大模型鉴权；也会兼容映射到旧 HTTP ASR/TTS 调试接口。
+- `APP_ID` / `ACCESS_TOKEN`：火山实时语音大模型鉴权。
 - `VOLCENGINE_REALTIME_SPEAKER`：默认 `zh_female_vv_jupiter_bigtts`。
-- `DEEPSEEK_API_KEY` 或 `LLM_API_KEY`：仅旧 `/api/turn`、`/api/text-turn` 调试接口需要。
-- `VOLCENGINE_TTS_*`：仅旧 `/api/turn`、`/api/text-turn` 调试接口需要。
 
-运行 `GET /api/health` 可以查看缺失项，不会输出密钥。
+当前已从 `/Users/ely/workspace/research/agent/DreamingRAG/.env` 复制真实 `.env` 到本仓库本地文件。该文件被 `.gitignore` 排除，不会提交。
+
+`GET /api/health` 可查看缺失项，不输出密钥。
+
+## Wire Format
+
+Browser -> `/api/realtime`：
+
+- WebSocket binary frame
+- 24kHz mono signed int16 little-endian PCM
+- no WAV header
+
+`/api/realtime` -> browser：
+
+- JSON status/transcript/assistant text events
+- WebSocket binary frame for audio
+- 24kHz mono float32 little-endian PCM
+- no WAV header
+
+音频输出曾被误按 int16 播放，会产生强电噪声；正确播放格式是 `pcm_f32le`。
 
 ## Commands
 
@@ -49,57 +54,24 @@ npm run dev
 ./scripts/harness-check.sh
 npm test
 npm run build
-npm run dev
+npm run smoke:local
+npm run config:check
+npm run smoke:realtime
+npm run smoke:bridge
 ```
 
-## HTTP API
-
-主 demo 使用 WebSocket：
+## API
 
 `GET /api/realtime`
 
-- 浏览器上行：24kHz mono signed int16 PCM binary frame。
-- 后端下行：JSON 状态/转写/回复文本事件，以及 24kHz mono signed int16 PCM binary frame。
+- 必须 WebSocket upgrade；普通 HTTP 请求返回 `426`。
+- 浏览器上行音频 binary。
+- 后端下行 JSON 事件和音频 binary。
 
-旧 HTTP 调试接口仍保留：
+`GET /api/health`
 
-`POST /api/turn`
+返回 realtime 配置状态和音频格式。
 
-```json
-{
-  "sessionId": "local",
-  "mimeType": "audio/wav",
-  "audioBase64": "..."
-}
-```
-
-内部调试可用文本入口验证 LLM/TTS 和播放链路；前端主 demo 不走这条路线：
-
-`POST /api/text-turn`
-
-```json
-{
-  "sessionId": "local",
-  "text": "你好，测试一下语音回复"
-}
-```
-
-返回：
-
-```json
-{
-  "requestId": "...",
-  "transcript": "...",
-  "reply": "...",
-  "audio": {
-    "audioBase64": "...",
-    "mimeType": "audio/mpeg"
-  }
-}
-```
-
-## API References
+## API Reference
 
 - 火山引擎实时语音大模型：`WSS wss://openspeech.bytedance.com/api/v3/realtime/dialogue`，resource id `volc.speech.dialog`。
-- 火山引擎 ASR：豆包流式语音识别模型2.0，`WSS wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`。
-- 火山引擎 TTS：HTTP SSE 单向流式 V3，`POST https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse`。

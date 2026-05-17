@@ -25,6 +25,12 @@ const events = {
 } as const;
 
 export function attachVolcRealtimeBridge(client: ClientSocket, config: RealtimeConfig) {
+  if (!config.appId || !config.accessToken) {
+    client.send(JSON.stringify({ type: "error", message: "Missing realtime APP_ID/ACCESS_TOKEN" }));
+    client.close();
+    return;
+  }
+
   const bridge = new VolcRealtimeBridge(client, config);
 
   client.on("message", (data, isBinary) => {
@@ -60,7 +66,13 @@ class VolcRealtimeBridge {
     });
 
     this.upstream.on("open", () => {
-      this.sendJson({ type: "status", state: "connecting-realtime" });
+      this.sendJson({
+        type: "status",
+        state: "connecting-realtime",
+        inputFormat: config.inputFormat,
+        outputFormat: config.outputFormat,
+        sampleRate: config.sampleRate
+      });
       this.upstream.send(packet(events.startConnection, {}));
     });
     this.upstream.on("message", (data) => this.handleUpstreamMessage(toBuffer(data)));

@@ -5,11 +5,12 @@
 
 # 运行时架构
 
-首版采用浏览器 + Node.js 后端的单进程原型。
+唯一主路线：
 
-- 浏览器：使用 Web Audio 持续采集用户语音，显示音量条，只做 24kHz mono PCM 上行和 24kHz mono PCM 下行播放。
-- 后端：暴露静态页面和 `/api/realtime` WebSocket。主路线只桥接火山实时语音大模型，不在本地做 VAD、ASR、LLM、TTS 编排。
-- 旧调试接口：`/api/turn` 和 `/api/text-turn` 仍保留，用于验证旧 ASR/LLM/TTS 组件，不是主 demo 路线。
-- 实时模型：使用火山引擎 realtime dialogue endpoint `wss://openspeech.bytedance.com/api/v3/realtime/dialogue`，resource id `volc.speech.dialog`。
+`Browser Web Audio -> /api/realtime -> Volcengine realtime dialogue -> Browser Web Audio`
 
-当前 demo 已切到原生实时全双工路线：用户开口检测、说完判定、打断和回复生成都由火山 realtime 模型处理。音量条只用于调试麦克风采集强度。
+- 浏览器：持续采集麦克风，显示音量条，上行 24kHz mono `pcm_s16le`，播放下行 24kHz mono `pcm_f32le`。
+- 后端：暴露静态页面、`GET /api/health`、`GET /api/realtime` WebSocket。
+- 模型：火山实时语音大模型 `volc.speech.dialog`。
+
+本项目不再保留 ASR -> LLM -> TTS 级联实现。全双工、用户开口检测、端点检测、打断和回复生成均以实时语音大模型为准。

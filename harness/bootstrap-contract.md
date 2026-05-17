@@ -14,10 +14,11 @@
 
 ## 环境
 
-- 技术栈：Node.js + TypeScript + Fastify + 原生浏览器 MediaRecorder/Web Audio。
+- 技术栈：Node.js + TypeScript + Fastify WebSocket + 原生浏览器 Web Audio。
 - 运行时版本：Node.js 20+。
 - 依赖安装：`npm install`。
-- 本地服务：`npm run dev` 启动 HTTP 服务，默认监听 `http://localhost:5177`。
+- 本地服务：`npm run dev` 启动 HTTP/WebSocket 服务，默认监听 `http://localhost:5177`。
+- 外部 API：火山实时语音大模型 `volc.speech.dialog`。
 
 ## 标准命令
 
@@ -26,7 +27,9 @@ npm install
 npm run dev
 npm test
 npm run build
-npm run smoke:mock
+npm run smoke:local
+npm run smoke:realtime
+npm run smoke:bridge
 ```
 
 ## 初始化验收清单
@@ -39,5 +42,5 @@ npm run smoke:mock
 
 ## 已知缺口
 
-- 业务代码尚未实现；初始化阶段只建立可恢复 harness。
+- 自动化不能代替用户授权浏览器麦克风；浏览器真实说话仍需人工测试。
 - API 环境变量需要从 `/Users/ely/workspace/research/agent/DreamingRAG/.env` 复制到本仓库 `.env`，但不得提交密钥。

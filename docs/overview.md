@@ -7,34 +7,39 @@
 
 ## 目标
 
-实现一个“效果上全双工”的语音交互 demo。浏览器只承担麦克风采集、播放和状态展示；长期主形态是后端服务向外提供语音会话能力。首版允许用 VAD/分段录音模拟实时全双工：持续监听用户语音，ASR/LLM/TTS 并发流水线处理，用户再次开口时立即中断正在播放的回复。
+实现原生实时全双工语音交互 demo。浏览器负责麦克风采集、音量观测和音频播放；后端负责把浏览器 WebSocket 桥接到火山实时语音大模型。
+
+唯一技术路线：`input audio -> realtime model -> output audio`。
 
 ## 受众
 
-本仓库服务于快速验证全双工语音交互形态的研究/原型开发者，以及后续要把能力封装成后端服务的 agent。
+本仓库服务于快速验证端到端实时语音交互形态的研究/原型开发者，以及后续要把能力封装成后端服务的 agent。
 
 ## 范围内
 
-- 浏览器 demo：麦克风输入、音频播放、会话状态展示、用户打断。
-- 后端服务：静态页面、音频上传接口、ASR/LLM/TTS 编排、配置检查。
-- API 集成：火山引擎 ASR/TTS，模型中转站 OpenAI-compatible Chat Completions。
-- 本地验证：不依赖真实麦克风的单元/集成测试，以及可手动运行的浏览器流程。
+- 浏览器 demo：麦克风输入、音量条、实时音频播放、状态展示。
+- 后端服务：静态页面、`/api/realtime` WebSocket、配置检查。
+- API 集成：火山实时语音大模型 `volc.speech.dialog`。
+- 本地验证：不依赖真实麦克风的 smoke，以及可手动运行的浏览器流程。
 
 ## 范围外
 
+- ASR -> LLM -> TTS 级联路线。
 - 复现 Moshi 或 SeedDuplex 的模型训练、低延迟 codec/streaming 架构。
 - 生产级 WebRTC、鉴权、多租户、计费、持久化会话历史。
-- 前端视觉精修；前端只需足够支持采集、测试和调试。
+- 前端视觉精修。
 
 ## 核心工作流
 
 - 开发者复制/填写 `.env`，安装依赖，启动后端服务。
-- 用户在浏览器点击开始，授权麦克风，系统持续监听。
-- 检测到一段用户语音后，前端上传音频；后端调用 ASR 得到文本，再调用 LLM 生成回复，再调用 TTS 返回音频。
-- 如果用户在播放期间再次说话，前端停止当前音频并提交新的语音片段，实现效果上的全双工打断。
+- 用户在浏览器点击开始，授权麦克风。
+- 浏览器持续发送 24kHz mono `pcm_s16le` 到 `/api/realtime`。
+- 后端桥接火山 realtime dialogue。
+- 浏览器接收 JSON 状态/文本事件和 24kHz mono `pcm_f32le` 音频并播放。
 
 ## 验证
 
 - 聚焦验证：`npm test`
-- 完整验证：`npm run build`
-- Mock 端到端 smoke：`npm run smoke:mock`
+- 本地服务 smoke：`npm run smoke:local`
+- 真实模型 smoke：`npm run smoke:realtime`
+- 本地桥接 smoke：`npm run smoke:bridge`

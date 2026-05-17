@@ -7,7 +7,7 @@
 
 ## 项目目标
 
-实现一个“效果上全双工”的语音交互 demo：浏览器采集麦克风，后端提供会话服务，火山引擎负责 ASR/TTS，模型中转站负责 LLM；用户开口时能打断正在播放的回复，系统持续监听、识别、生成和播报。
+实现一个原生实时全双工语音交互 demo：浏览器采集麦克风，后端桥接火山实时语音大模型，模型直接完成听、想、说。唯一技术路线是 `input audio -> realtime model -> output audio`；不要恢复 ASR -> LLM -> TTS 级联路线。
 
 ## 唯一事实来源
 
@@ -49,7 +49,7 @@
 1. Harness sanity：`./scripts/harness-check.sh`
 2. 静态/单元验证：`npm test`
 3. 集成/构建验证：`npm run build`
-4. 端到端或手动流程：`npm run dev` 后打开浏览器 demo，完成一次录音、识别、LLM 回复、TTS 播放和打断。
+4. 端到端或手动流程：`npm run dev` 后打开浏览器 demo，完成一次实时语音输入、模型回复、音频播放和插话打断。
 
 ## 完成定义
 

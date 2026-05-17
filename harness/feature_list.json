@@ -18,12 +18,12 @@
       "id": "F002",
       "priority": "P0",
       "area": "demo",
-      "title": "浏览器到后端的全双工语音 demo",
-      "behavior": "浏览器采集麦克风并持续发送 24kHz PCM 到 /api/realtime；后端桥接火山实时语音大模型；音量条只做采集观测，不做本地 VAD 判定。",
+      "title": "浏览器到火山实时模型的全双工语音 demo",
+      "behavior": "浏览器采集麦克风并持续发送 24kHz pcm_s16le 到 /api/realtime；后端桥接火山实时语音大模型；浏览器播放 24kHz pcm_f32le 下行音频。",
       "status": "passing",
-      "verification": "npm test && npm run build && npm run smoke:mock && npm run smoke:bridge；打开 http://localhost:5177 后授权麦克风。",
-      "evidence": "2026-05-17: npm test -> 5 files / 12 tests passed；npm run build -> pass；npm run smoke:mock -> pass；npm run config:check -> ok；npm run smoke:bridge -> transcript/text/audioBytes 全返回；页面 /api/health ready。",
-      "notes": "主路线已切为原生 realtime。旧 /api/turn 和 /api/text-turn 只作为调试接口保留。"
+      "verification": "npm test && npm run build && npm run smoke:local && npm run smoke:bridge；打开 http://localhost:5177 后授权麦克风。",
+      "evidence": "2026-05-17: npm test -> pass；npm run build -> pass；npm run smoke:local -> pass；npm run config:check -> ok；npm run smoke:bridge -> transcript/text/audioFormat=pcm_f32le/audioStats 全返回。",
+      "notes": "主路线已切为原生 realtime。ASR -> LLM -> TTS 级联代码已删除。"
     },
     {
       "id": "F003",
@@ -33,8 +33,8 @@
       "behavior": "使用 volc.speech.dialog 原生实时语音大模型完成音频输入、转写、回复文本和语音输出。",
       "status": "passing",
       "verification": "npm run smoke:realtime && npm run smoke:bridge",
-      "evidence": "2026-05-17: npm run smoke:realtime -> transcript=你好，请介绍一下你自己。且返回 text/audioBytes；npm run smoke:bridge -> 经本地 /api/realtime 桥接返回 transcript/text/audioBytes。",
-      "notes": "用户已授权实时语音大模型；这条路线取代旧的本地 VAD + ASR/LLM/TTS 编排路线。"
+      "evidence": "2026-05-17: npm run smoke:realtime -> transcript=你好，请介绍一下你自己。且返回 text/audioFormat=pcm_f32le/audioStats；npm run smoke:bridge -> 经本地 /api/realtime 桥接返回 transcript/text/audioStats。",
+      "notes": "用户已授权实时语音大模型；这条路线取代旧级联路线。"
     }
   ]
 }

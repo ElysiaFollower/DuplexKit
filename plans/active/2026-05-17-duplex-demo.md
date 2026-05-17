@@ -20,8 +20,8 @@
 - `./scripts/harness-check.sh` 通过。
 - `npm test` 通过。
 - `npm run build` 通过。
-- `npm run smoke:realtime` 通过。
-- `npm run smoke:bridge` 通过。
+- `npm run smoke:realtime` 通过，且校验输出为 `pcm_f32le`。
+- `npm run smoke:bridge` 通过，且校验输出为 `pcm_f32le`。
 - `.env.example` 明确列出需要的变量，真实 `.env` 不进入 git。
 - `npm run dev` 可启动服务，浏览器页面可采集麦克风、显示音量条、经 `/api/realtime` 收发音频。
 
@@ -32,3 +32,4 @@
 3. API 客户端与编排服务。
 4. 浏览器 demo 与验证收尾。
 5. 火山 realtime 原生全双工切换。
+6. 修复输出格式并删除旧级联路线。

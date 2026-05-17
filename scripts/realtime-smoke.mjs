@@ -40,6 +40,7 @@ const ws = new WebSocket(url, {
 
 const seen = [];
 let audioBytes = 0;
+const audioChunks = [];
 let text = "";
 let transcript = "";
 let done = false;
@@ -103,11 +104,14 @@ ws.addEventListener("message", async (message) => {
   }
   if (parsed.event === events.ttsResponse && parsed.rawPayload) {
     audioBytes += parsed.rawPayload.length;
+    audioChunks.push(parsed.rawPayload);
   }
   if (parsed.event === events.ttsEnd || parsed.event === events.llmTextEnd) {
     done = true;
     clearTimeout(timeout);
-    console.log(JSON.stringify({ ok: true, mode, seen, transcript, text, audioBytes }, null, 2));
+    const audio = Buffer.concat(audioChunks);
+    const audioStats = getFloat32AudioStats(audio);
+    console.log(JSON.stringify({ ok: true, mode, seen, transcript, text, audioBytes, audioFormat: "pcm_f32le", audioStats }, null, 2));
     ws.close();
   }
 });
@@ -172,6 +176,24 @@ function extractWavData(wav) {
   if (dataIndex < 0) throw new Error("WAV data chunk not found");
   const size = wav.readUInt32LE(dataIndex + 4);
   return wav.subarray(dataIndex + 8, dataIndex + 8 + size);
+}
+
+function getFloat32AudioStats(audio) {
+  if (audio.length % 4 !== 0) throw new Error(`realtime output length ${audio.length} is not float32-aligned`);
+  let peak = 0;
+  let sumSquares = 0;
+  const samples = audio.length / 4;
+  for (let offset = 0; offset < audio.length; offset += 4) {
+    const value = audio.readFloatLE(offset);
+    if (!Number.isFinite(value)) throw new Error(`realtime output has non-finite float32 at byte ${offset}`);
+    peak = Math.max(peak, Math.abs(value));
+    sumSquares += value * value;
+  }
+  const rms = Math.sqrt(sumSquares / Math.max(samples, 1));
+  if (samples > 0 && (peak > 1.05 || rms <= 0)) {
+    throw new Error(`unexpected realtime float32 output stats peak=${peak} rms=${rms}`);
+  }
+  return { samples, peak: Number(peak.toFixed(6)), rms: Number(rms.toFixed(6)) };
 }
 
 function header() {

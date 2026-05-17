@@ -9,7 +9,7 @@
 
 - 当前功能项：无 active；F002/F003 均 passing
 - 当前任务计划：`plans/active/2026-05-17-duplex-demo.md`
-- 上次验证：`npm test`、`npm run build`、`npm run smoke:mock`、`npm run config:check`、`npm run smoke:realtime`、`npm run smoke:bridge` 均通过
+- 上次验证：`npm test`、`npm run build`、`npm run smoke:local`、`npm run config:check`、`npm run smoke:realtime`、`npm run smoke:bridge` 均通过
 - 下一步最佳动作：用户在浏览器授权麦克风后，人工测试真实说话、插话、打断体验。
 
 ## 状态约定
@@ -46,4 +46,12 @@
 - 新增后端 `/api/realtime` WebSocket 桥接：浏览器上行 24kHz mono int16 PCM，后端转火山 realtime；火山下行 ASR/LLM/TTS 事件和 PCM 音频，后端转给浏览器。
 - 前端删除本地 VAD/分段/打断状态机，音量条仅作为麦克风采集观测。
 - 新增 `scripts/realtime-smoke.mjs` 和 `scripts/realtime-bridge-smoke.mjs`。
-- 验证：`npm run smoke:realtime` 返回 transcript/text/audioBytes；`npm run smoke:bridge` 经本地 `/api/realtime` 返回 transcript/text/audioBytes；`npm test`、`npm run build`、`npm run smoke:mock`、`npm run config:check`、`./scripts/harness-check.sh` 均通过。
+- 验证：`npm run smoke:realtime` 返回 transcript/text/audioBytes；`npm run smoke:bridge` 经本地 `/api/realtime` 返回 transcript/text/audioBytes；`npm test`、`npm run build`、`npm run smoke:local`、`npm run config:check`、`./scripts/harness-check.sh` 均通过。
+
+### 2026-05-17 - 修复 realtime 输出电噪声并删除旧级联路线
+
+- 复现并抓取火山 realtime TTS 下行 bytes：首包按 float32 little-endian 解码为正常小幅音频，按 int16 解码会出现异常交替大值。
+- 根因：浏览器把 `pcm_f32le` 下行误当 `pcm_s16le` 播放。
+- 修复：浏览器下行播放改用 `Float32Array`；smoke 增加 `audioFormat=pcm_f32le` 和 audioStats 校验。
+- 重构：删除 ASR -> LLM -> TTS 级联实现、旧 `/api/turn`、旧 `/api/text-turn`、旧 provider 和相关测试；保留唯一主路线 `/api/realtime`。
+- 验证：`npm test` 通过；`npm run build` 通过；`npm run smoke:local` 通过；`npm run config:check` 通过；`npm run smoke:realtime` 返回 `audioFormat=pcm_f32le`、peak/rms 正常；`npm run smoke:bridge` 经本地 `/api/realtime` 返回 `audioFormat=pcm_f32le`、peak/rms 正常；`./scripts/harness-check.sh` 通过。

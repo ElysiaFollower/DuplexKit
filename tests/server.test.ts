@@ -9,17 +9,18 @@ afterEach(async () => {
 });
 
 describe("server", () => {
-  it("serves health in mock mode", async () => {
-    const app = buildServer(loadConfig({ DEMO_MOCK: "1" }));
+  it("serves health for realtime route", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
     apps.push(app);
 
     const response = await app.inject({ method: "GET", url: "/api/health" });
     expect(response.statusCode).toBe(200);
     expect(response.json().config.ok).toBe(true);
+    expect(response.json().config.realtime.outputFormat).toBe("pcm_f32le");
   });
 
   it("serves the browser demo page", async () => {
-    const app = buildServer(loadConfig({ DEMO_MOCK: "1" }));
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
     apps.push(app);
 
     const response = await app.inject({ method: "GET", url: "/" });
@@ -27,43 +28,22 @@ describe("server", () => {
     expect(response.body).toContain("Duplex Voice Demo");
   });
 
-  it("runs a mock turn through the HTTP API", async () => {
-    const app = buildServer(loadConfig({ DEMO_MOCK: "1" }));
+  it("rejects non-WebSocket realtime HTTP requests", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
     apps.push(app);
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/turn",
-      payload: {
-        sessionId: "test",
-        mimeType: "audio/wav",
-        audioBase64: Buffer.alloc(64).toString("base64")
-      }
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.transcript).toContain("mock");
-    expect(body.reply).toContain(body.transcript);
-    expect(body.audio.mimeType).toBe("audio/wav");
+    const response = await app.inject({ method: "GET", url: "/api/realtime" });
+    expect(response.statusCode).toBe(426);
   });
 
-  it("runs a mock text turn through the HTTP API", async () => {
-    const app = buildServer(loadConfig({ DEMO_MOCK: "1" }));
+  it("does not expose legacy cascaded HTTP turn routes", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
     apps.push(app);
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/text-turn",
-      payload: {
-        sessionId: "test",
-        text: "测试文本入口"
-      }
-    });
+    const turn = await app.inject({ method: "POST", url: "/api/turn", payload: {} });
+    const textTurn = await app.inject({ method: "POST", url: "/api/text-turn", payload: {} });
 
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.transcript).toBe("测试文本入口");
-    expect(body.reply).toContain("测试文本入口");
+    expect(turn.statusCode).toBe(404);
+    expect(textTurn.statusCode).toBe(404);
   });
 });

@@ -7,10 +7,11 @@
 
 ## 运行时信号
 
-- 应用启动/就绪：`npm run dev` 输出监听地址；`GET /api/health` 返回配置状态。
-- 关键用户路径：前端状态依次出现 listening、uploading、thinking、speaking；打断时出现 interrupted。
-- 数据/副作用检查：`/api/turn` 响应包含 `transcript`、`reply` 和可播放的音频数据；不会写入持久化用户音频。
-- 错误上下文：后端错误包含失败阶段（config/asr/llm/tts）、可恢复提示和请求 id，不输出密钥。
+- 应用启动/就绪：`npm run dev` 输出监听地址；`GET /api/health` 返回 realtime 配置和音频格式。
+- 关键用户路径：前端状态出现 `connecting-realtime`、`starting-session`、`listening`、`thinking`、`speaking`。
+- 输入检查：右下角音量条显示浏览器麦克风 RMS。
+- 输出检查：`npm run smoke:bridge` 返回 transcript、assistant text、`audioFormat=pcm_f32le` 和 audioStats。
+- 错误上下文：WebSocket JSON error event 返回可读错误；不输出密钥。
 
 ## 过程工件
 

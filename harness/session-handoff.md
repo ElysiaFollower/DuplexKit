@@ -8,48 +8,46 @@
 ## 仓库状态
 
 - 分支：main
-- 提交：待提交本轮 realtime 切换
-- 脏文件：README、docs、src、public、scripts、tests、package、harness 状态更新
+- 提交：待提交本轮音频格式修复和级联路线删除
 - 当前计划：`plans/active/2026-05-17-duplex-demo.md`
-- 当前功能项：F002/F003 passing；主 demo 已统一为 Web Audio PCM -> /api/realtime -> 火山 realtime dialogue
+- 当前功能项：F002/F003 passing；主 demo 唯一路线为 Web Audio -> `/api/realtime` -> 火山 realtime dialogue
+
+## 当前技术路线
+
+- 输入：浏览器上行 24kHz mono `pcm_s16le` binary frame。
+- 模型：火山实时语音大模型 `volc.speech.dialog`。
+- 输出：火山下行 24kHz mono `pcm_f32le`；浏览器用 `Float32Array` 播放。
+- 已删除：ASR -> LLM -> TTS 级联实现、旧 `/api/turn`、旧 `/api/text-turn`。
 
 ## 当前已验证状态
 
-- 上次运行命令：`./scripts/harness-check.sh`; `npm test`; `npm run build`; `npm run smoke:mock`; `npm run config:check`; `npm run smoke:realtime`; `npm run smoke:bridge`
-- 结果：harness、测试、构建、mock smoke、配置检查、直连火山 realtime smoke、本地桥接 smoke 均通过
-- 证据：F002/F003 evidence 已写入 `harness/feature_list.json`；`npm run smoke:bridge` 返回 transcript、assistant text 和 audioBytes
-
-## 本会话改动
-
-- 新增火山 realtime dialogue 协议 smoke。
-- 新增 `/api/realtime` WebSocket 后端桥接。
-- 前端切为持续 PCM 上行和 PCM 下行播放；音量条只做观测。
-- 新增本地桥接 smoke，验证浏览器同路径后端链路。
-- 更新 README、架构文档、配置状态、harness 功能清单。
+- 上次运行命令：`npm test`; `npm run build`; `npm run smoke:local`; `npm run config:check`; `npm run smoke:realtime`; `npm run smoke:bridge`; `./scripts/harness-check.sh`
+- 结果：全部通过
+- 证据：F002/F003 evidence 已写入 `harness/feature_list.json`；smoke 返回 `audioFormat=pcm_f32le` 和 audioStats
 
 ## 仍损坏或未验证
 
-- 自动化无法替用户点击浏览器麦克风权限；需要用户本机手动授权后测试真实说话、插话、打断。
-- 旧 `/api/turn` ASR provider 仍不是主路线，不作为当前 demo 阻塞。
+- 自动化无法替用户点击浏览器麦克风权限；需要用户本机手动测试真实说话、插话、打断。
 
 ## 清洁状态
 
 - 构建/静态检查：`npm run build` 通过
-- 测试/端到端：`npm test` 通过；`npm run smoke:mock` 通过；`npm run smoke:realtime` 通过；`npm run smoke:bridge` 通过
-- 进度文件同步：已同步到 feature_list、progress、handoff
-- 临时工件：无
-- 启动路径：`npm run dev` 或 `npm start` 后访问 `http://localhost:5177`
+- 测试：`npm test` 通过
+- 本地 smoke：`npm run smoke:local` 通过
+- 真实模型 smoke：`npm run smoke:realtime` 和 `npm run smoke:bridge` 通过
+- 进度文件同步：已同步 feature_list、progress、handoff、docs
 
 ## 下一步最佳动作
 
-1. 提交本轮 realtime 切换。
-2. 用户打开 `http://localhost:5177`，点 Start，授权麦克风。
-3. 若页面无反应，先看右下角音量条；若音量有变化但无转写，跑 `npm run smoke:bridge` 区分浏览器采集问题和后端/火山问题。
+1. 用户打开 `http://localhost:5177`，点 Start，授权麦克风。
+2. 若输入正常但输出异常，先跑 `npm run smoke:bridge` 看 `audioFormat` 和 `audioStats`。
+3. 若 smoke 正常但浏览器异常，检查浏览器控制台、AudioContext sampleRate 和二进制 frame 长度。
 
 ## 命令
 
-- 初始化：`./init.sh`
-- Harness 检查：`./scripts/harness-check.sh`
-- 聚焦验证：`npm test`
-- 完整验证：`npm run build`
-- 调试说明：`npm run dev` 后访问 `http://localhost:5177`；健康检查为 `GET /api/health`。
+- 启动：`npm run dev`
+- 测试：`npm test`
+- 构建：`npm run build`
+- 本地 smoke：`npm run smoke:local`
+- 真实直连 smoke：`npm run smoke:realtime`
+- 本地桥接 smoke：`npm run smoke:bridge`

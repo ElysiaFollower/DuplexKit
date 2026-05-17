@@ -11,6 +11,7 @@ const audioWavPath = process.env.REALTIME_SMOKE_AUDIO_WAV || "/tmp/duplex-realti
 let transcript = "";
 let text = "";
 let audioBytes = 0;
+const audioChunks = [];
 let sent = false;
 const seen = [];
 
@@ -26,7 +27,9 @@ ws.on("open", () => {});
 
 ws.on("message", async (data, isBinary) => {
   if (isBinary) {
-    audioBytes += Buffer.byteLength(data);
+    const chunk = Buffer.from(data);
+    audioBytes += chunk.length;
+    audioChunks.push(chunk);
     return;
   }
   const message = JSON.parse(data.toString("utf8"));
@@ -39,7 +42,9 @@ ws.on("message", async (data, isBinary) => {
   if (message.type === "assistant_text") text = message.text;
   if (message.type === "llm_end") {
     clearTimeout(timeout);
-    console.log(JSON.stringify({ ok: true, seen, transcript, text, audioBytes }, null, 2));
+    const audio = Buffer.concat(audioChunks);
+    const audioStats = getFloat32AudioStats(audio);
+    console.log(JSON.stringify({ ok: true, seen, transcript, text, audioBytes, audioFormat: "pcm_f32le", audioStats }, null, 2));
     ws.close();
   }
   if (message.type === "error") {
@@ -80,4 +85,22 @@ function extractWavData(wav) {
   if (dataIndex < 0) throw new Error("WAV data chunk not found");
   const size = wav.readUInt32LE(dataIndex + 4);
   return wav.subarray(dataIndex + 8, dataIndex + 8 + size);
+}
+
+function getFloat32AudioStats(audio) {
+  if (audio.length % 4 !== 0) throw new Error(`bridge output length ${audio.length} is not float32-aligned`);
+  let peak = 0;
+  let sumSquares = 0;
+  const samples = audio.length / 4;
+  for (let offset = 0; offset < audio.length; offset += 4) {
+    const value = audio.readFloatLE(offset);
+    if (!Number.isFinite(value)) throw new Error(`bridge output has non-finite float32 at byte ${offset}`);
+    peak = Math.max(peak, Math.abs(value));
+    sumSquares += value * value;
+  }
+  const rms = Math.sqrt(sumSquares / Math.max(samples, 1));
+  if (samples > 0 && (peak > 1.05 || rms <= 0)) {
+    throw new Error(`unexpected bridge float32 output stats peak=${peak} rms=${rms}`);
+  }
+  return { samples, peak: Number(peak.toFixed(6)), rms: Number(rms.toFixed(6)) };
 }

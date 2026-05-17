@@ -177,10 +177,10 @@ async function handleRealtimeMessage(event) {
 
 function playPcm(arrayBuffer) {
   if (!audioContext || arrayBuffer.byteLength === 0) return;
-  const input = new Int16Array(arrayBuffer);
+  const input = new Float32Array(arrayBuffer);
   const buffer = audioContext.createBuffer(1, input.length, upstreamSampleRate);
   const channel = buffer.getChannelData(0);
-  for (let i = 0; i < input.length; i += 1) channel[i] = input[i] / 32768;
+  for (let i = 0; i < input.length; i += 1) channel[i] = Math.max(-1, Math.min(1, input[i]));
   const node = audioContext.createBufferSource();
   node.buffer = buffer;
   node.connect(audioContext.destination);
