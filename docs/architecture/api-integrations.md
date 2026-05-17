@@ -19,6 +19,7 @@
 ## 关键链接
 
 - 实时语音大模型 API 文档：https://www.volcengine.com/docs/6561/1594356?lang=zh
+- 实时语音大模型 API 调研笔记：[../references/volcengine-realtime-api-research.md](../references/volcengine-realtime-api-research.md)
 - 火山语音应用控制台：https://console.volcengine.com/speech/app
 
 ## 音频格式

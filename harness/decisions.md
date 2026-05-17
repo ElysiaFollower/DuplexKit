@@ -24,3 +24,24 @@
 - 原因：用户明确接受效果上全双工，且目标是快速获得可运行 demo，不训练或复现 Moshi/SeedDuplex。
 - 否决方案：直接实现低延迟流式 codec/模型级全双工或生产 WebRTC 架构。
 - 后续约束：后端接口和前端状态机要保留向真正流式会话升级的余地。
+
+### 2026-05-17 - 主路线切换为火山原生实时语音大模型
+
+- 决策：主路线统一为 `browser mic -> /api/realtime -> Volcengine realtime speech model -> browser audio`。
+- 原因：用户目标是原生全双工体验，火山端到端实时语音大模型已验证可用。
+- 否决方案：继续维护 ASR -> LLM -> TTS 级联路线。
+- 后续约束：新增能力默认接入原生 realtime bridge，不恢复级联语音方案。
+
+### 2026-05-17 - 方案B记录为候选工具协议
+
+- 决策：把“语音咒语工具协议”记录为方案B候选，详见 `docs/adr/2026-05-17-spell-tool-protocol.md`。
+- 原因：当前火山 realtime 文档未展示通用 function calling/tool schema，但 assistant text 可被后端监听。
+- 否决方案：把触发词方案直接拍成唯一主路线。
+- 后续约束：先调研官方方案A；若方案A不能覆盖任意外部工具，再实现方案B tracer bullet。
+
+### 2026-05-17 - 方案A优先调查官方原生能力
+
+- 决策：优先调查火山官方内置联网搜索、外部 RAG、上下文管理、文本 query 能否承担工具类能力。
+- 原因：这些能力在官方 API 文档中出现，可能比自定义触发协议更稳定。
+- 否决方案：不看官方能力，直接做后端规则匹配工具协议。
+- 后续约束：调研结论必须沉淀在 `docs/references/volcengine-realtime-api-research.md`，实现前先确认所需字段和事件。
