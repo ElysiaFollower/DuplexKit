@@ -30,7 +30,7 @@ if [ "$ready" != "1" ]; then
   exit 1
 fi
 
-curl -fsS "http://127.0.0.1:$port/" | grep -q "Duplex Voice Demo"
+curl -fsS "http://127.0.0.1:$port/" | grep -q "DuplexKit"
 curl -fsS "http://127.0.0.1:$port/api/health" | grep -q "pcm_f32le"
 
 status=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$port/api/realtime")

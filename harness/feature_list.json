@@ -35,6 +35,28 @@
       "verification": "npm run smoke:realtime && npm run smoke:bridge",
       "evidence": "2026-05-17: npm run smoke:realtime -> transcript=你好，请介绍一下你自己。且返回 text/audioFormat=pcm_f32le/audioStats；npm run smoke:bridge -> 经本地 /api/realtime 桥接返回 transcript/text/audioStats。",
       "notes": "用户已授权实时语音大模型；这条路线取代旧级联路线。"
+    },
+    {
+      "id": "F004",
+      "priority": "P0",
+      "area": "tools",
+      "title": "后端 Planner 工具调用 demo",
+      "behavior": "每轮 ASREnded transcript 进入规则版后端 Planner；命中地图/导航意图时创建 tool_call_id、执行 mock 工具、通过 ChatTTSText 播报 tool_started/tool_result，并在 Dialogue 和 Session flow 记录结构化信息。",
+      "status": "passing",
+      "verification": "npm test && npm run build；浏览器手动说“打开地图/导航到北京南站”观察 Dialogue 和 Session flow。",
+      "evidence": "2026-05-19: npm run typecheck、npm test、npm run build、npm run smoke:local、./scripts/harness-check.sh 均通过；用户已手测工具调用可用，后续发现 Dialogue 漏记工具语音并已修复。",
+      "notes": "当前工具是 mock，占位返回写死结果；真实地图服务尚未接入。Planner 当前为规则版 demo，ADR 保留未来 LLM Planner 方向。"
+    },
+    {
+      "id": "F005",
+      "priority": "P0",
+      "area": "observability",
+      "title": "调试面板和结构化 session log",
+      "behavior": "前端提供 Runtime prompts、Dialogue、Session flow、Tool registry；Save log 将会话历史、结构化事件和元信息保存到 logs/session/*.json，供复现 bug 后分析。",
+      "status": "passing",
+      "verification": "npm test && curl POST /api/session-logs && ./scripts/harness-check.sh",
+      "evidence": "2026-05-19: npm test 14 tests passing；手动 curl POST /api/session-logs 返回 201 并写入 logs/session/*.json；测试会读取保存文件并验证 schemaVersion/dialogue/flow。",
+      "notes": "session log 是调试工件，不是产品级会话历史；logs/session/*.json 被 .gitignore 排除。"
     }
   ]
 }

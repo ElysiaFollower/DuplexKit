@@ -1,6 +1,6 @@
-# Duplex Voice Demo
+# DuplexKit
 
-原生实时语音全双工 demo。唯一主路线：
+原生实时语音全双工 demo 和工具调用原型。唯一语音主路线：
 
 `browser mic -> /api/realtime -> Volcengine realtime speech model -> browser audio`
 
@@ -33,7 +33,22 @@ npm run dev
 
 命中工具后，后端会记录 `planner -> tool_started -> tool_result`，并用实时语音链路播出“我来...”和“好了...”反馈。用户开口时，前端收到 `ASRInfo` 会立即清掉排队播放。
 
-当前 demo 为保证可听效果，`tool_started` 和 `tool_result` 播报使用 `300 ChatTTSText`；`502 ChatRAGText` 仍是目标结果注入路线，待继续调稳定时序。
+当前 demo 为保证可听效果，`tool_started` 和 `tool_result` 播报使用 `300 ChatTTSText`。`502 ChatRAGText` 是后续可继续验证的结果注入路线，不是当前默认实现。
+
+## Debug Panels
+
+浏览器页面有两类记录：
+
+- `Dialogue`：给体验测试人员看的干净对话历史。
+- `Session flow`：给开发调试看的结构化事件流水，包含 ASR、planner、tool、Volc raw event 和保存日志事件。
+
+`Session flow` 的 `Save log` 会把当前对话、结构化事件、runtime prompt 编辑内容和工具 registry 快照写入：
+
+```text
+logs/session/*.json
+```
+
+日志文件默认不进入 git，用于复现 bug 后交给后续 agent 分析。
 
 ## Required API Variables
 
@@ -84,6 +99,10 @@ npm run smoke:bridge
 `GET /api/health`
 
 返回 realtime 配置状态和音频格式。
+
+`POST /api/session-logs`
+
+把前端收集的 `dialogue + flow + metadata` 保存为仓库内 JSON 调试日志。服务端生成文件名，不接受前端传入路径。
 
 ## API Reference
 

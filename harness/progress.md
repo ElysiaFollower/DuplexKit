@@ -7,10 +7,10 @@
 
 ## 当前状态
 
-- 当前功能项：无 active；F002/F003 均 passing
-- 当前任务计划：`plans/active/2026-05-17-duplex-demo.md`
-- 上次验证：`npm test`、`npm run build`、`npm run smoke:local`、`npm run config:check`、`npm run smoke:realtime`、`npm run smoke:bridge` 均通过
-- 下一步最佳动作：用户在浏览器授权麦克风后，人工测试真实说话、插话、打断体验。
+- 当前功能项：无 active；F001-F005 均 passing
+- 当前任务计划：全双工 demo 计划已完成，归档到 `plans/archive/2026-05-17-duplex-demo.md`
+- 上次验证：`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`./scripts/harness-check.sh` 均通过；真实模型 smoke 最近通过证据保留在 F002/F003
+- 下一步最佳动作：用户改名工作区后运行 `./init.sh` 和验证阶梯；复现 bug 时先点 `Save log` 保存 `logs/session/*.json`
 
 ## 状态约定
 
@@ -55,3 +55,36 @@
 - 修复：浏览器下行播放改用 `Float32Array`；smoke 增加 `audioFormat=pcm_f32le` 和 audioStats 校验。
 - 重构：删除 ASR -> LLM -> TTS 级联实现、旧 `/api/turn`、旧 `/api/text-turn`、旧 provider 和相关测试；保留唯一主路线 `/api/realtime`。
 - 验证：`npm test` 通过；`npm run build` 通过；`npm run smoke:local` 通过；`npm run config:check` 通过；`npm run smoke:realtime` 返回 `audioFormat=pcm_f32le`、peak/rms 正常；`npm run smoke:bridge` 经本地 `/api/realtime` 返回 `audioFormat=pcm_f32le`、peak/rms 正常；`./scripts/harness-check.sh` 通过。
+
+### 2026-05-17 - 后端 Planner 工具 demo 和调试面板
+
+- 确认工具调用主路线：后端 Planner 读取火山 ASR transcript，决定是否调用工具、是否澄清、是否 no-op；语音主链路仍是火山原生 realtime。
+- 实现规则版 Planner 和 mock 地图/导航工具：`map.open`、`map.set_origin`、`map.set_destination`、`navigation.start`。
+- 工具调用创建 `tool_call_id`，记录 started/result/dropped/clarification 等结构化事件。
+- 前端增加 Runtime prompts、Dialogue、Session flow、Tool registry、Protocol notes 面板。
+- 当前 tool_started/tool_result 播报使用 `300 ChatTTSText`；`502 ChatRAGText` 保留为后续验证路线。
+- 验证：`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`./scripts/harness-check.sh` 通过。
+
+### 2026-05-18 - 结构化 session log
+
+- 用户发现真实交互 bug 后需要保存复现证据，增加 `Save log`。
+- 后端新增 `POST /api/session-logs`，把前端收集的 `dialogue + flow + runtime settings + tool registry + metadata` 写到 `logs/session/*.json`。
+- 服务端生成文件名，不接受前端路径；`.gitignore` 排除 session JSON，仅保留 `logs/session/.gitkeep`。
+- 自动测试覆盖保存、读取和清理测试日志。
+- 验证：`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`./scripts/harness-check.sh` 通过。
+
+### 2026-05-18/19 - 修复 Dialogue 漏记工具语音
+
+- 发现工具调用时浏览器能听到 `ChatTTSText` 语音，但 `Dialogue` 面板不记录对应文本。
+- 根因：后端把工具播报文本发给火山合成音频，但没有同步发给浏览器记录；这类文本不一定走火山 `llmText` 回传。
+- 修复：`sendChatTtsText` 同步发送 `assistant_text`，前端对 `append` 文本新建 Assistant turn。
+- 顺手修复后端普通回复累计文本跨轮串联风险：`ASRInfo` 新 turn 时重置累计文本。
+- 验证：`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`./scripts/harness-check.sh` 通过。
+
+### 2026-05-19 - 归档交接与项目命名
+
+- 用户确认项目名 `DuplexKit`，远端仓库为 `https://github.com/ElysiaFollower/DuplexKit.git`。
+- 页面标题、README 和 docs 更新为 DuplexKit；清理旧 handoff 中已经过期的音频修复描述。
+- 补齐 F004/F005 功能清单，更新 runtime/API/overview 文档，明确调试日志不是产品级会话历史。
+- 完成计划从 `plans/active` 移到 `plans/archive`。
+- 下一会话优先动作：改名后跑 `./init.sh` 和验证阶梯；真实 bug 先保存 session log 再诊断。

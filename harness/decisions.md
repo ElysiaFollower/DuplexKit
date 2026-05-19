@@ -48,14 +48,14 @@
 
 ### 2026-05-17 - 工具调用主路线采用后端 Planner
 
-- 决策：工具调用主路线采用 `ASR transcript -> 后端 Planner LLM -> Tool Executor -> 502 ChatRAGText 身体反馈 -> realtime 播报`，详见 `docs/adr/2026-05-17-backend-planner-tool-calls.md`。
+- 决策：工具调用主路线采用 `ASR transcript -> 后端 Planner -> Tool Executor -> realtime 播报`，详见 `docs/adr/2026-05-17-backend-planner-tool-calls.md`。当前 demo 是规则版 Planner + mock 地图工具；后续可替换为 LLM Planner。
 - 原因：火山没有公开通用 tool call 事件；官方 web_agent 不能调用我们的服务；external_rag 可作为稳定结果注入通道。
 - 否决方案：把官方 web_agent 当作可复用工具调用方案；让语音模型直接用自然文本/咒语承载底层工具参数。
-- 后续约束：首版每个 `ASREnded` 都调用一次 Planner；工具参数由后端 Planner 生成并做 schema 校验；参数不足时 Planner 必须主动澄清，不猜测执行；咒语只作为交互层候选；demo 承认纯文本 Planner 不理解声色、韵律和声纹身份。
+- 后续约束：首版每个 `ASREnded` 都进入 Planner；工具参数由后端 Planner 生成并做 schema 校验；参数不足时 Planner 必须主动澄清，不猜测执行；咒语只作为交互层候选；demo 承认纯文本 Planner 不理解声色、韵律和声纹身份。
 
 ### 2026-05-17 - 工具调用必须有生命周期和结果投递门控
 
-- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；先通过 `300 ChatTTSText` 播放 `tool_started` 安抚反馈，工具完成后目标路线通过 `502 ChatRAGText` 注入 `tool_result`，当前 demo 可先用 `300 ChatTTSText` 稳定播报结果。
+- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；当前 demo 通过 `300 ChatTTSText` 播放 `tool_started` 安抚反馈和 `tool_result` 结果反馈，并同步把注入文本发给浏览器记录到 `Dialogue`。`502 ChatRAGText` 保留为后续可验证的结果注入路线。
 - 原因：工具可能耗时，用户需要即时反馈；等待期间用户可能打断或改变意图，旧结果不能乱播。
 - 否决方案：只在工具完成后注入最终结果；不记录工具调用 ID；用户打断后仍无条件播报旧结果。
 - 后续约束：running tool 被用户打断后标记为 possibly superseded，最终是否投递结果由 Planner 基于新 transcript、`tool_call_id` 和 turn 状态决定。
@@ -66,3 +66,10 @@
 - 原因：`ASRInfo` 是最快的用户开口信号；打断播放不应等待 transcript、ASREnded 或 Planner。
 - 否决方案：暂停旧音频后继续播放；每个流式词都调用 Planner；等 Planner 决定后再停播。
 - 后续约束：旧音频被打断后不恢复播放；先验证火山是否自动停止/修正旧 reply，再决定是否后端按 reply_id 丢弃音频、发送 `515 ClientInterrupt` 或启用 Planner 重规划；demo 阶段接受少量误停播，后续再加音量阈值和 transcript 校验。
+
+### 2026-05-19 - 保存结构化 session log 作为复现证据
+
+- 决策：浏览器提供 `Save log`，把 `Dialogue`、`Session flow`、runtime prompt 编辑内容、工具 registry 快照和页面元信息发送到 `POST /api/session-logs`，服务端写入 `logs/session/*.json`。
+- 原因：用户发现真实交互 bug 时，agent 不一定在线；结构化日志能保留可复现证据，避免只靠口头描述。
+- 否决方案：只看浏览器页面、只保存纯文本聊天记录、允许前端传任意保存路径。
+- 后续约束：session log 是调试工件，默认不提交 git；服务端生成文件名，不接受前端路径；后续诊断优先读取最新日志再改代码。

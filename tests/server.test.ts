@@ -26,7 +26,7 @@ describe("server", () => {
 
     const response = await app.inject({ method: "GET", url: "/" });
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("Duplex Voice Demo");
+    expect(response.body).toContain("DuplexKit");
   });
 
   it("rejects non-WebSocket realtime HTTP requests", async () => {

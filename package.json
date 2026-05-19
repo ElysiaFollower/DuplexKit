@@ -1,5 +1,5 @@
 {
-  "name": "duplex",
+  "name": "duplexkit",
   "version": "1.0.0",
   "description": "Native realtime full-duplex voice interaction demo.",
   "main": "dist/server.js",

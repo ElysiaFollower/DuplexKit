@@ -22,14 +22,16 @@
 用户语音
 -> 火山 realtime ASR transcript
 -> ASREnded
--> 后端 Planner LLM 判断 tool_call / ask_clarification / no_action
+-> 后端 Planner 判断 tool_call / ask_clarification / no_action
 -> 参数足够：Tool Executor 执行真实工具
 -> 参数不足：300 ChatTTSText 让语音模型自然追问
--> 工具完成：通过 502 ChatRAGText 注入工具结果和身体反馈；当前 demo 可先用 300 ChatTTSText 稳定播报结果
+-> 工具完成：当前 demo 用 300 ChatTTSText 稳定播报结果；502 ChatRAGText 保留为后续可验证的结果注入路线
 -> 火山 realtime 语音模型用第一人称播报
 ```
 
 火山 realtime 继续负责语音 I/O、ASR、打断、音频输出和自然播报。后端 Planner 负责“是否调用工具”和“工具参数”。Tool Executor 负责真实动作。
+
+当前实现是规则版 Planner + mock 地图工具，用于验证生命周期、打断和可观测性；后续可把 Planner 替换为 LLM 或规则+LLM 混合实现。
 
 Planner 输出动作类型：
 
@@ -81,8 +83,8 @@ Planner 决定 tool_call
 -> 300 ChatTTSText 播放 tool_started 安抚反馈
 -> Tool Executor 执行
 -> 工具完成
--> 若 tool_call 仍 active，目标路线用 502 ChatRAGText 注入 tool_result 身体反馈
--> 当前 demo 若 502 时序不稳定，可用 300 ChatTTSText 播报 tool_result
+-> 若 tool_call 仍 active，当前 demo 用 300 ChatTTSText 播报 tool_result，并同步 assistant_text 到 Dialogue
+-> 后续继续验证 502 ChatRAGText 是否适合作为更丰富的工具结果注入路线
 -> 若用户已打断或 Planner 判定过期，丢弃结果或只写后台状态
 ```
 
@@ -188,7 +190,8 @@ Planner 基于文本 transcript 和上下文工作，不能完整理解用户声
 
 ## 后续验证
 
-- 实现最小工具：`map.open`，无参数。
-- 实现参数工具：`map.set_destination({ place })`。
-- 每轮记录 `transcript -> tool_call -> tool_result -> injected_text`。
-- 验证 `502 ChatRAGText` 的时序：工具结果注入前，火山是否会抢先普通回答。
+- 已实现最小 mock 工具：`map.open`，无参数。
+- 已实现参数 mock 工具：`map.set_origin({ place })`、`map.set_destination({ place })`、`navigation.start({ place? })`。
+- 已实现每轮记录：`transcript -> planner -> tool_started -> tool_result -> assistant_text`。
+- 待验证：`502 ChatRAGText` 的时序和效果，确认是否比当前 `300 ChatTTSText` 更适合承载工具结果。
+- 待实现：真实地图/导航服务、权限和幂等控制。

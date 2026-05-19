@@ -16,6 +16,8 @@
 
 本地后端只做 WebSocket 桥接和火山二进制协议封包/解析，不本地做 VAD、ASR、LLM、TTS 编排。
 
+工具 demo 例外：后端会在 `ASREnded` 后读取 transcript，运行规则版 Planner，并通过火山 `300 ChatTTSText` 注入短句播报工具开始和工具结果。这不是恢复 ASR -> LLM -> TTS 级联路线；音频输入、端点、合成和播放仍由 realtime dialogue 链路承担。
+
 ## 关键链接
 
 - 实时语音大模型 API 文档：https://www.volcengine.com/docs/6561/1594356?lang=zh
@@ -50,6 +52,7 @@
 
 - JSON：状态、转写、回复文本
 - binary：`pcm_f32le` 24kHz mono audio
+- 后端注入的 `ChatTTSText` 也会同步发送 `assistant_text` JSON，确保 `Dialogue` 和 session log 能记录用户听到的工具播报文本。
 
 ## 已验证
 

@@ -5,6 +5,8 @@
 
 # 2026-05-17 全双工语音 demo
 
+状态：已完成并归档，当前项目名为 DuplexKit。
+
 ## 目标
 
 交付一个可运行浏览器 demo：用户通过麦克风输入语音，浏览器持续发送 PCM 到后端，后端桥接火山实时语音大模型并返回可播放 PCM 音频。用户再次说话时由 realtime 模型处理打断和端点检测。
@@ -12,7 +14,7 @@
 ## 非目标
 
 - 不训练或复现 Moshi/SeedDuplex 模型。
-- 不做生产级鉴权、持久化、多租户或 WebRTC。
+- 不做生产级鉴权、多租户、WebRTC、用户级长期记忆或产品化会话历史。
 - 不追求前端视觉质量。
 
 ## 验收
@@ -33,3 +35,6 @@
 4. 浏览器 demo 与验证收尾。
 5. 火山 realtime 原生全双工切换。
 6. 修复输出格式并删除旧级联路线。
+7. 增加后端 Planner + mock 地图工具调用 demo。
+8. 增加 Dialogue、Session flow、Tool registry 和 runtime prompt 调试面板。
+9. 增加结构化 session log 保存，用于复现 bug。
