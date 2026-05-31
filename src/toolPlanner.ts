@@ -5,20 +5,29 @@ export type PlannerDecision =
   | { action: "ask_clarification"; missing: string[]; question: string }
   | { action: "tool_call"; tool: ToolName; args: Record<string, string>; spoken: string };
 
-export type ToolName = "map.open" | "map.set_origin" | "map.set_destination" | "navigation.start";
+export const TOOL_NAMES = ["map.open", "map.close", "map.set_origin", "map.set_destination", "navigation.start"] as const;
+
+export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const TOOL_DEFINITIONS = [
   {
     name: "map.open",
-    status: "mock",
-    description: "占位工具：假装打开屏幕上的 3D 地图。无需参数。",
+    status: "bridge",
+    description: "打开地图界面。无需参数。",
     parameters: { type: "object", properties: {}, required: [] },
     examples: ["打开地图", "打开3D地图"]
   },
   {
+    name: "map.close",
+    status: "bridge",
+    description: "关闭地图界面。无需参数。",
+    parameters: { type: "object", properties: {}, required: [] },
+    examples: ["关闭地图", "收起地图"]
+  },
+  {
     name: "map.set_origin",
-    status: "mock",
-    description: "占位工具：假装设置地图起点。适合用户明确说出起点位置。",
+    status: "bridge",
+    description: "设置地图起点。适合用户明确说出起点位置。",
     parameters: {
       type: "object",
       properties: { place: { type: "string", description: "起点地点名或地址" } },
@@ -28,8 +37,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "map.set_destination",
-    status: "mock",
-    description: "占位工具：假装设置地图终点，但不立即启动导航。",
+    status: "bridge",
+    description: "设置地图终点，但不立即启动导航。",
     parameters: {
       type: "object",
       properties: { place: { type: "string", description: "终点地点名或地址" } },
@@ -39,8 +48,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "navigation.start",
-    status: "mock",
-    description: "占位工具：假装启动导航。可以带目的地；如果缺目的地则使用当前终点。",
+    status: "bridge",
+    description: "启动导航。可以带目的地；如果缺目的地则使用当前终点。",
     parameters: {
       type: "object",
       properties: { place: { type: "string", description: "可选目的地地点名或地址" } },
@@ -80,11 +89,29 @@ export type ToolCallState = {
 export type ToolResult = {
   toolCallId: string;
   tool: ToolName;
-  status: "success";
+  status: "success" | "error";
   summary: string;
   visibleResult: string;
-  mock: true;
+  origin: "client" | "fallback";
   debugNote: string;
+};
+
+export type ToolRequest = {
+  toolCallId: string;
+  turnId: string;
+  tool: ToolName;
+  args: Record<string, string>;
+  spoken: string;
+  prompt: string;
+};
+
+export type ToolResultInput = {
+  toolCallId: string;
+  tool?: ToolName;
+  status?: "success" | "error";
+  summary: string;
+  visibleResult?: string;
+  debugNote?: string;
 };
 
 type MapState = {
@@ -101,6 +128,10 @@ export class DemoToolRuntime {
   plan(transcript: string): PlannerDecision {
     const text = normalize(transcript);
     if (!text) return { action: "no_action", reason: "empty transcript" };
+
+    if (text.includes("关闭地图") || text.includes("收起地图") || text.includes("关掉地图")) {
+      return { action: "tool_call", tool: "map.close", args: {}, spoken: "我来关闭地图。" };
+    }
 
     if (text.includes("办公室") && (text.includes("我") || text.includes("我的"))) {
       return {
@@ -184,8 +215,22 @@ export class DemoToolRuntime {
         status: "success",
         summary: "地图已打开",
         visibleResult: "3D 地图已打开，当前显示默认城市鸟瞰视角",
-        mock: true,
-        debugNote: "mock map.open: no real map process was started"
+        origin: "fallback",
+        debugNote: "fallback map.open: no real map process was started"
+      };
+    }
+
+    if (call.tool === "map.close") {
+      this.map.opened = false;
+      this.map.navigating = false;
+      return {
+        toolCallId: call.toolCallId,
+        tool: call.tool,
+        status: "success",
+        summary: "地图已关闭",
+        visibleResult: "地图界面已关闭",
+        origin: "fallback",
+        debugNote: "fallback map.close: no real map process was started"
       };
     }
 
@@ -198,8 +243,8 @@ export class DemoToolRuntime {
         status: "success",
         summary: `起点已设置为${call.args.place}`,
         visibleResult: `地图起点已高亮：${call.args.place}`,
-        mock: true,
-        debugNote: "mock map.set_origin: in-memory state only"
+        origin: "fallback",
+        debugNote: "fallback map.set_origin: in-memory state only"
       };
     }
 
@@ -212,8 +257,8 @@ export class DemoToolRuntime {
         status: "success",
         summary: `终点已设置为${call.args.place}`,
         visibleResult: `地图终点已高亮：${call.args.place}`,
-        mock: true,
-        debugNote: "mock map.set_destination: in-memory state only"
+        origin: "fallback",
+        debugNote: "fallback map.set_destination: in-memory state only"
       };
     }
 
@@ -227,8 +272,20 @@ export class DemoToolRuntime {
       status: "success",
       summary: `导航已启动，目的地是${target}`,
       visibleResult: `模拟导航路线已生成：${this.map.origin || "当前位置"} -> ${target}，预计 28 分钟`,
-      mock: true,
-      debugNote: "mock navigation.start: no real navigation service was called"
+      origin: "fallback",
+      debugNote: "fallback navigation.start: no real navigation service was called"
+    };
+  }
+
+  resolve(toolCall: ToolCallState, result: ToolResultInput): ToolResult {
+    return {
+      toolCallId: result.toolCallId,
+      tool: result.tool || toolCall.tool,
+      status: result.status || "success",
+      summary: result.summary,
+      visibleResult: result.visibleResult || result.summary,
+      origin: "client",
+      debugNote: result.debugNote || "client tool result"
     };
   }
 }

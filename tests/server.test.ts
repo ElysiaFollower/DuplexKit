@@ -75,6 +75,8 @@ describe("server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().tools.map((tool: { name: string }) => tool.name)).toContain("map.open");
     expect(response.json().promptTemplates.length).toBeGreaterThan(0);
+    expect(response.json().realtimeProtocol.toolNames).toContain("map.close");
+    expect(response.json().realtimeProtocol.clientMessages[0].type).toBe("tool_result");
   });
 
   it("saves structured session logs inside the repo", async () => {

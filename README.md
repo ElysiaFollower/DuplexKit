@@ -1,6 +1,6 @@
 # DuplexKit
 
-原生实时语音全双工 demo 和工具调用原型。唯一语音主路线：
+原生实时语音全双工后端服务和工具调用原型。唯一语音主路线：
 
 `browser mic -> /api/realtime -> Volcengine realtime speech model -> browser audio`
 
@@ -24,14 +24,15 @@ npm run dev
 
 ## Tool Demo
 
-当前 demo 带一个规则版后端 Planner 和 mock 地图工具，用于验证工具调用生命周期。地图/导航工具还没有接真实服务，执行时返回写死的模拟结果，让语音模型按“身体动作已完成”来反馈：
+当前服务带一个规则版后端 Planner，用于把语音 transcript 转成地图/导航工具请求。真实地图由应用端执行；本仓库浏览器 demo 会自动回传模拟 `tool_result`，方便本地验证：
 
 - “打开地图”
+- “关闭地图”
 - “设置终点北京南站”
 - “导航到北京南站”
 - “导航到我的办公室”
 
-命中工具后，后端会记录 `planner -> tool_started -> tool_result`，并用实时语音链路播出“我来...”和“好了...”反馈。用户开口时，前端收到 `ASRInfo` 会立即清掉排队播放。
+命中工具后，后端会记录 `planner -> tool_request -> tool_result`，并用实时语音链路播出“我来...”和“好了...”反馈。用户开口时，前端收到 `ASRInfo` 会立即清掉排队播放。
 
 当前 demo 为保证可听效果，`tool_started` 和 `tool_result` 播报使用 `300 ChatTTSText`。`502 ChatRAGText` 是后续可继续验证的结果注入路线，不是当前默认实现。
 
@@ -95,6 +96,36 @@ npm run smoke:bridge
 - 必须 WebSocket upgrade；普通 HTTP 请求返回 `426`。
 - 浏览器上行音频 binary。
 - 后端下行 JSON 事件和音频 binary。
+- 后端发送 `tool_request` 时，应用端应执行真实地图动作并回传 `tool_result`。
+
+`tool_request` 示例：
+
+```json
+{
+  "type": "tool_request",
+  "request": {
+    "toolCallId": "uuid",
+    "turnId": "question_id",
+    "tool": "navigation.start",
+    "args": { "place": "北京南站" },
+    "spoken": "我来导航到北京南站。",
+    "prompt": "debug prompt"
+  }
+}
+```
+
+`tool_result` 示例：
+
+```json
+{
+  "type": "tool_result",
+  "toolCallId": "uuid",
+  "tool": "navigation.start",
+  "status": "success",
+  "summary": "导航已启动，目的地是北京南站",
+  "visibleResult": "金工小子地图已显示路线"
+}
+```
 
 `GET /api/health`
 

@@ -57,6 +57,22 @@
       "verification": "npm test && curl POST /api/session-logs && ./scripts/harness-check.sh",
       "evidence": "2026-05-19: npm test 14 tests passing；手动 curl POST /api/session-logs 返回 201 并写入 logs/session/*.json；测试会读取保存文件并验证 schemaVersion/dialogue/flow。",
       "notes": "session log 是调试工件，不是产品级会话历史；logs/session/*.json 被 .gitignore 排除。"
+    },
+    {
+      "id": "F006",
+      "priority": "P0",
+      "area": "service",
+      "title": "后端服务化实时音频与工具协议",
+      "behavior": "应用端通过单一实时会话通道上行音频，后端下行状态/转写/可播放音频，并通过结构化工具请求与结果消息驱动打开地图、关闭地图、设置起点、设置终点和开启导航。",
+      "status": "passing",
+      "verification": [
+        "./scripts/harness-check.sh",
+        "npm test",
+        "npm run build",
+        "npm run smoke:local"
+      ],
+      "evidence": "2026-05-24: ./scripts/harness-check.sh -> pass, 0 warnings；npm run typecheck -> pass；npm test -> 4 files / 18 tests passing；npm run build -> pass；npm run smoke:local -> local smoke passed on http://127.0.0.1:5188。",
+      "notes": "实时通道现在暴露 tool_request / tool_result 服务协议；浏览器 demo 会自动模拟真实 app 回传，外部 app 可接管真实地图/导航动作。"
     }
   ]
 }

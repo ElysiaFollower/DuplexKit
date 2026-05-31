@@ -4,10 +4,25 @@ import type { RawData, WebSocket as ClientSocket } from "ws";
 import WebSocket from "ws";
 import type { AppConfig } from "./config.js";
 import { getRuntimeSettings } from "./runtimeSettings.js";
-import { clarificationPrompt, DemoToolRuntime, toolResultPrompt, toolStartedPrompt } from "./toolPlanner.js";
+import {
+  clarificationPrompt,
+  DemoToolRuntime,
+  type ToolCallState,
+  type ToolRequest,
+  type ToolResult,
+  toolResultPrompt,
+  toolStartedPrompt,
+  type ToolResultInput
+} from "./toolPlanner.js";
+import { normalizeToolResultInput, StopControlSchema, ToolResultInputSchema, toToolRequestPayload } from "./protocol.js";
 
 type RealtimeConfig = AppConfig["realtime"];
 type ByteBuffer = Buffer<ArrayBufferLike>;
+type PendingToolInvocation = {
+  call: ToolCallState;
+  timeout: ReturnType<typeof setTimeout>;
+  state: "waiting" | "resolved" | "timed_out";
+};
 
 const events = {
   startConnection: 1,
@@ -86,6 +101,7 @@ class VolcRealtimeBridge {
   private currentQuestionId = "";
   private suppressDefaultReply = false;
   private currentAudioAllowed = true;
+  private pendingToolCalls = new Map<string, PendingToolInvocation>();
 
   constructor(private readonly client: ClientSocket, private readonly config: RealtimeConfig) {
     this.upstream = new WebSocket(config.endpoint, {
@@ -129,7 +145,19 @@ class VolcRealtimeBridge {
   handleClientControl(raw: string) {
     try {
       const message = JSON.parse(raw) as { type?: string };
-      if (message.type === "stop") this.close();
+      const stop = StopControlSchema.safeParse(message);
+      if (stop.success) {
+        this.close();
+        return;
+      }
+
+      const toolResult = ToolResultInputSchema.safeParse(message);
+      if (toolResult.success) {
+        this.handleToolResult(normalizeToolResultInput(toolResult.data));
+        return;
+      }
+
+      this.sendJson({ type: "error", message: "Invalid client control message" });
     } catch {
       this.sendJson({ type: "error", message: "Invalid client control message" });
     }
@@ -138,6 +166,8 @@ class VolcRealtimeBridge {
   close() {
     if (this.closed) return;
     this.closed = true;
+    for (const pending of this.pendingToolCalls.values()) clearTimeout(pending.timeout);
+    this.pendingToolCalls.clear();
     if (this.upstream.readyState === WebSocket.OPEN) {
       this.upstream.send(packet(events.finishSession, {}, this.sessionId));
       this.upstream.send(packet(events.finishConnection, {}));
@@ -257,19 +287,62 @@ class VolcRealtimeBridge {
     this.suppressDefaultReply = true;
     this.currentAudioAllowed = false;
     const call = this.tools.start(turnId, decision);
+    const request = this.buildToolRequest(call, decision.spoken);
+    const timeout = setTimeout(() => void this.resolvePendingToolCall(call.toolCallId), 1800);
+    this.pendingToolCalls.set(call.toolCallId, { call, timeout, state: "waiting" });
     this.sendJson({ type: "tool", phase: "started", call });
+    this.sendJson(toToolRequestPayload(request));
     this.sendJson({ type: "tool", phase: "started_prompt", prompt: toolStartedPrompt(call, decision.spoken) });
     this.sendChatTtsText(decision.spoken, "tool_started");
+  }
 
-    const result = await this.tools.execute(call.toolCallId);
-    if (!result) {
-      this.sendJson({ type: "tool", phase: "dropped", toolCallId: call.toolCallId });
+  private handleToolResult(result: ToolResultInput) {
+    const pending = this.pendingToolCalls.get(result.toolCallId);
+    if (!pending) {
+      this.sendJson({ type: "tool", phase: "orphan_result", result });
       return;
     }
+    if (pending.state !== "waiting") {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    pending.state = "resolved";
+    this.pendingToolCalls.delete(result.toolCallId);
+    const normalized = this.tools.resolve(pending.call, result);
+    this.finalizeToolResult(normalized);
+  }
 
+  private async resolvePendingToolCall(toolCallId: string) {
+    const pending = this.pendingToolCalls.get(toolCallId);
+    if (!pending || pending.state !== "waiting" || this.closed) return;
+    pending.state = "timed_out";
+    const result = await this.tools.execute(toolCallId);
+    if (!result) {
+      this.pendingToolCalls.delete(toolCallId);
+      this.sendJson({ type: "tool", phase: "dropped", toolCallId });
+      return;
+    }
+    if (pending.state !== "timed_out") return;
+    this.pendingToolCalls.delete(toolCallId);
+    pending.state = "resolved";
+    this.finalizeToolResult(result);
+  }
+
+  private finalizeToolResult(result: ToolResult) {
     this.sendJson({ type: "tool", phase: "result", result });
     this.sendJson({ type: "tool", phase: "result_prompt", prompt: toolResultPrompt(result) });
     this.sendChatTtsText(`好了，${result.summary}。`, "tool_result");
+  }
+
+  private buildToolRequest(call: ToolCallState, spoken: string): ToolRequest {
+    return {
+      toolCallId: call.toolCallId,
+      turnId: call.turnId,
+      tool: call.tool,
+      args: call.args,
+      spoken,
+      prompt: toolStartedPrompt(call, spoken)
+    };
   }
 
   private sendChatRagText(externalRag: string) {

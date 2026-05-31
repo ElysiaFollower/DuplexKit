@@ -7,10 +7,10 @@
 
 ## 当前状态
 
-- 当前功能项：无 active；F001-F005 均 passing
-- 当前任务计划：全双工 demo 计划已完成，归档到 `plans/archive/2026-05-17-duplex-demo.md`
-- 上次验证：`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`./scripts/harness-check.sh` 均通过；真实模型 smoke 最近通过证据保留在 F002/F003
-- 下一步最佳动作：用户改名工作区后运行 `./init.sh` 和验证阶梯；复现 bug 时先点 `Save log` 保存 `logs/session/*.json`
+- 当前功能项：无 active；F001-F006 均 passing
+- 当前任务计划：后端服务化计划已完成，归档到 `plans/archive/2026-05-24-backend-service.md`
+- 上次验证：2026-05-24 `./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local` 均通过；真实模型 smoke 最近通过证据保留在 F002/F003
+- 下一步最佳动作：让“金工小子” app 按 `GET /api/tools` 返回的 realtime protocol 接入 `/api/realtime`，收到 `tool_request` 后执行真实地图动作并回传 `tool_result`
 
 ## 状态约定
 
@@ -88,3 +88,12 @@
 - 补齐 F004/F005 功能清单，更新 runtime/API/overview 文档，明确调试日志不是产品级会话历史。
 - 完成计划从 `plans/active` 移到 `plans/archive`。
 - 下一会话优先动作：改名后跑 `./init.sh` 和验证阶梯；真实 bug 先保存 session log 再诊断。
+
+### 2026-05-24 - 后端服务化实时音频与工具协议
+
+- 把 `/api/realtime` 明确为外部 app 的主服务通道：binary 上行 `pcm_s16le`，binary 下行 `pcm_f32le`，JSON 下行状态/转写/工具请求。
+- 新增结构化 `tool_request` / `tool_result` 协议，覆盖 `map.open`、`map.close`、`map.set_origin`、`map.set_destination`、`navigation.start`。
+- `GET /api/tools` 现在返回工具 registry 和 realtime protocol 元数据，方便“金工小子” app 初始化时校验音频格式和工具 schema。
+- 浏览器 demo 收到 `tool_request` 后会自动回传模拟 `tool_result`，真实 app 可替换为真实地图/导航执行。
+- 工具结果回传超时后仍走后端 fallback demo 结果，避免链路挂死。
+- 验证：`./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local` 均通过。

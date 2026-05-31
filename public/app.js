@@ -347,10 +347,44 @@ async function handleRealtimeMessage(event) {
   if (message.type === "tool") {
     addFlow("tool", message);
   }
+  if (message.type === "tool_request") {
+    addFlow("tool_request", message.request);
+    sendDemoToolResult(message.request);
+  }
   if (message.type === "raw_event") {
     addFlow("volc", message);
     console.debug("realtime event", message);
   }
+}
+
+function sendDemoToolResult(request) {
+  if (!request?.toolCallId || socket?.readyState !== WebSocket.OPEN) return;
+  const place = request.args?.place;
+  const summaries = {
+    "map.open": "地图已打开",
+    "map.close": "地图已关闭",
+    "map.set_origin": `起点已设置为${place || "指定位置"}`,
+    "map.set_destination": `终点已设置为${place || "指定位置"}`,
+    "navigation.start": `导航已启动，目的地是${place || "当前终点"}`
+  };
+  const visibleResults = {
+    "map.open": "金工小子地图已显示",
+    "map.close": "金工小子地图已关闭",
+    "map.set_origin": `金工小子地图起点：${place || "指定位置"}`,
+    "map.set_destination": `金工小子地图终点：${place || "指定位置"}`,
+    "navigation.start": `金工小子地图导航已开始：${place || "当前终点"}`
+  };
+  socket.send(
+    JSON.stringify({
+      type: "tool_result",
+      toolCallId: request.toolCallId,
+      tool: request.tool,
+      status: "success",
+      summary: summaries[request.tool] || "工具动作已完成",
+      visibleResult: visibleResults[request.tool] || "工具动作已完成",
+      debugNote: "browser demo auto-acknowledged tool_request"
+    })
+  );
 }
 
 function addFlow(kind, payload) {
