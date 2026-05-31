@@ -15,7 +15,8 @@
     "smoke:local": "scripts/local-smoke.sh",
     "config:check": "node dist/scripts/config-check.js",
     "smoke:realtime": "node scripts/realtime-smoke.mjs",
-    "smoke:bridge": "node scripts/realtime-bridge-smoke.mjs"
+    "smoke:bridge": "node scripts/realtime-bridge-smoke.mjs",
+    "raw:realtime": "node scripts/raw-realtime-demo.mjs"
   },
   "keywords": [],
   "author": "",
