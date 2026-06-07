@@ -1,7 +1,12 @@
 {
   "version": 1,
   "wip_limit": 1,
-  "status_values": ["not_started", "active", "blocked", "passing"],
+  "status_values": [
+    "not_started",
+    "active",
+    "blocked",
+    "passing"
+  ],
   "features": [
     {
       "id": "F001",
@@ -73,6 +78,25 @@
       ],
       "evidence": "2026-05-24: ./scripts/harness-check.sh -> pass, 0 warnings；npm run typecheck -> pass；npm test -> 4 files / 18 tests passing；npm run build -> pass；npm run smoke:local -> local smoke passed on http://127.0.0.1:5188。",
       "notes": "实时通道现在暴露 tool_request / tool_result 服务协议；浏览器 demo 会自动模拟真实 app 回传，外部 app 可接管真实地图/导航动作。"
+    },
+    {
+      "id": "F007",
+      "priority": "P0",
+      "area": "tools",
+      "title": "Assistant response 驱动工具调用",
+      "behavior": "语音模型用固定自然语言句式单独声明工具调用；后端只在 ChatEnded 后解析完整 assistant response 触发工具，不再用 ASR transcript 直接触发；工具串行执行，pending 期间只允许控制工具取消当前调用，工具结果通过 300 ChatTTSText 注入。",
+      "status": "passing",
+      "verification": [
+        "./scripts/harness-check.sh",
+        "npm test",
+        "npm run fixtures:audio",
+        "npm run test:realtime-fixtures",
+        "npm run build",
+        "npm run smoke:local",
+        "浏览器手动验证固定工具声明、普通闲聊不触发、pending 拒绝和 kill 取消"
+      ],
+      "evidence": "2026-06-07: ./scripts/harness-check.sh -> pass, 0 warnings；npm run typecheck -> pass；npm test -> 5 files / 25 tests passing；npm run build -> pass；NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost npm run smoke:local -> local smoke passed on http://127.0.0.1:5188；NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost npm run test:realtime-fixtures -> open-map/navigation/smalltalk/cancel fixtures passed against real realtime model。已固化 docs/integration/frontend-protocol.md、/api/tools protocol metadata、message_end 边界和五个 app 工具。计划已归档到 plans/archive/2026-05-31-assistant-driven-tools.md。",
+      "notes": "不引入文本 LLM Planner；不使用 ASR transcript 兜底；不依赖 ASREnded final transcript；502 ChatRAGText 暂不采用；真实 fixture 回归不放入默认 npm test，因为依赖 .env、网络和火山实时服务；小程序只需实现五个 app 工具，control.kill 是后端内部控制工具；pending 中 kill 的浏览器时序压测留作后续专项。"
     }
   ]
 }

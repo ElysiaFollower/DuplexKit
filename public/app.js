@@ -340,6 +340,9 @@ async function handleRealtimeMessage(event) {
     }
     addFlow("assistant_text", { text: message.text, source: message.source, append: message.append });
   }
+  if (message.type === "message_end") {
+    addFlow("message_end", message);
+  }
   if (message.type === "tts_end" || message.type === "llm_end") setState("listening");
   if (message.type === "planner") {
     addFlow("planner", { transcript: message.transcript, decision: message.decision });

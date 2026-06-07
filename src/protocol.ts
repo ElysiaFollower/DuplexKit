@@ -1,7 +1,23 @@
 import { z } from "zod";
-import { TOOL_NAMES, type ToolName, type ToolRequest, type ToolResultInput } from "./toolPlanner.js";
+import { type ToolName, type ToolRequest, type ToolResultInput } from "./toolPlanner.js";
+
+export const APP_TOOL_NAMES = [
+  "map.open",
+  "map.close",
+  "map.set_origin",
+  "map.set_destination",
+  "navigation.start"
+] as const;
+
+export const INTERNAL_CONTROL_TOOL_NAMES = ["control.kill"] as const;
+
+export const TOOL_NAMES = [...APP_TOOL_NAMES, ...INTERNAL_CONTROL_TOOL_NAMES] as const;
 
 export const ToolNameSchema = z.enum(TOOL_NAMES);
+
+export const AppToolNameSchema = z.enum(APP_TOOL_NAMES);
+
+export const SERVICE_PROTOCOL_VERSION = 1;
 
 export const ToolResultInputSchema = z.object({
   type: z.literal("tool_result"),
@@ -37,4 +53,80 @@ export function toToolRequestPayload(request: ToolRequest) {
     type: "tool_request" as const,
     request
   };
+}
+
+export function buildRealtimeProtocol(config: {
+  inputFormat: string;
+  outputFormat: string;
+  sampleRate: number;
+}) {
+  return {
+    version: SERVICE_PROTOCOL_VERSION,
+    websocket: "/api/realtime",
+    appToolNames: APP_TOOL_NAMES,
+    internalControlToolNames: INTERNAL_CONTROL_TOOL_NAMES,
+    inputAudio: {
+      transport: "binary websocket frame",
+      format: config.inputFormat,
+      sampleRate: config.sampleRate,
+      channels: 1,
+      framing: "raw PCM; no WAV header; send continuous chunks while session is open"
+    },
+    outputAudio: {
+      transport: "binary websocket frame",
+      format: config.outputFormat,
+      sampleRate: config.sampleRate,
+      channels: 1,
+      framing: "raw PCM; no WAV header; play in arrival order unless interrupted by asr_start"
+    },
+    textBoundaries: {
+      messageEndType: "message_end",
+      purpose: "front-end may line-break transcript or assistant text when message_end arrives",
+      emittedFor: ["asr_end", "llm_end", "tts_sentence_end", "tts_end"]
+    },
+    clientMessages: [
+      {
+        type: "tool_result",
+        description: "应用端完成真实地图/导航动作后回传结果；后端会把结果转成语音反馈。",
+        required: ["toolCallId", "summary"],
+        optional: ["tool", "status", "visibleResult", "debugNote"]
+      },
+      {
+        type: "stop",
+        description: "关闭当前 realtime 会话。"
+      }
+    ],
+    serverMessages: [
+      {
+        type: "status",
+        description: "连接和会话状态。"
+      },
+      {
+        type: "transcript",
+        description: "用户语音转写增量或当前最佳文本；以 message_end(asr_end) 作为一句话边界。"
+      },
+      {
+        type: "assistant_text",
+        description: "模型回复文本或后端注入的工具结果文本；以 message_end(llm_end/tts_sentence_end/tts_end) 作为显示边界。"
+      },
+      {
+        type: "message_end",
+        description: "一句话或一个播放片段的边界信号，供前端换行和收束当前显示段落。",
+        payload: "{ role: 'user' | 'assistant' | 'audio', reason: 'asr_end' | 'llm_end' | 'tts_sentence_end' | 'tts_end', questionId?, replyId? }"
+      },
+      {
+        type: "tool_request",
+        description: "后端 Planner 请求应用端执行地图/导航动作。",
+        payload: "request: { toolCallId, turnId, tool, args, spoken, prompt }"
+      },
+      {
+        type: "tool",
+        description: "工具生命周期调试事件；产品 UI 可以忽略，调试面板应记录。"
+      },
+      {
+        type: "error",
+        description: "后端或上游 realtime 错误。"
+      }
+    ]
+  } as const;
 }

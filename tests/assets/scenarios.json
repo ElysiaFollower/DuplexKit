@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "audioFormat": {
+    "container": "wav",
+    "codec": "pcm_s16le",
+    "sampleRate": 24000,
+    "channels": 1
+  },
+  "scenarios": [
+    {
+      "id": "open-map",
+      "text": "打开地图。",
+      "audioFile": "open-map.wav",
+      "expect": {
+        "assistantIncludesAny": ["我来调用地图工具", "打开地图"],
+        "tool": "map.open",
+        "toolArgs": {},
+        "toolResultIncludes": "地图已打开"
+      }
+    },
+    {
+      "id": "navigate-beijing-south",
+      "text": "导航到北京南站。",
+      "audioFile": "navigate-beijing-south.wav",
+      "expect": {
+        "assistantIncludesAny": ["我来调用导航工具", "北京南站"],
+        "tool": "navigation.start",
+        "toolArgs": {
+          "placeIncludes": "北京南站"
+        },
+        "toolResultIncludes": "导航已启动"
+      }
+    },
+    {
+      "id": "smalltalk-no-tool",
+      "text": "你好，今天我们随便聊两句。",
+      "audioFile": "smalltalk-no-tool.wav",
+      "expect": {
+        "assistantIncludesAny": ["你好", "可以", "聊"],
+        "noTool": true
+      }
+    },
+    {
+      "id": "cancel-no-running-tool",
+      "text": "取消当前工具调用。",
+      "audioFile": "cancel-no-running-tool.wav",
+      "expect": {
+        "assistantIncludesAny": ["我来调用控制工具", "取消当前工具调用"],
+        "toolResultTool": "control.kill",
+        "toolResultIncludes": "当前没有正在执行的工具调用"
+      }
+    }
+  ]
+}

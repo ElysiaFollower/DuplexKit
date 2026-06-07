@@ -1,68 +1,101 @@
 import { describe, expect, it } from "vitest";
-import { DemoToolRuntime } from "../src/toolPlanner.js";
+import { DemoToolRuntime, parseAssistantToolDeclaration } from "../src/toolPlanner.js";
 
 describe("DemoToolRuntime", () => {
-  it("plans map open", () => {
+  it("plans map open from assistant declaration", () => {
     const runtime = new DemoToolRuntime();
-    expect(runtime.plan("打开地图")).toMatchObject({
+    expect(runtime.plan("我来调用地图工具：打开地图。")).toMatchObject({
       action: "tool_call",
       tool: "map.open"
     });
   });
 
-  it("plans map close", () => {
+  it("plans map close from assistant declaration", () => {
     const runtime = new DemoToolRuntime();
-    expect(runtime.plan("关闭地图")).toMatchObject({
+    expect(runtime.plan("我来调用地图工具：关闭地图。")).toMatchObject({
       action: "tool_call",
       tool: "map.close"
     });
   });
 
-  it("asks clarification for office identity shortcuts", () => {
-    const runtime = new DemoToolRuntime();
-    expect(runtime.plan("是我，导航到我的办公室")).toMatchObject({
-      action: "ask_clarification",
-      missing: ["user_identity", "office_location"]
+  it("does not plan from user ASR-like text", () => {
+    expect(parseAssistantToolDeclaration("导航到北京南站")).toMatchObject({
+      action: "no_action"
     });
   });
 
-  it("plans navigation destination", () => {
+  it("plans navigation destination from assistant declaration", () => {
     const runtime = new DemoToolRuntime();
-    expect(runtime.plan("导航到北京南站")).toMatchObject({
+    expect(runtime.plan("我来调用导航工具：导航到北京南站。")).toMatchObject({
       action: "tool_call",
       tool: "navigation.start",
       args: { place: "北京南站" }
     });
   });
 
+  it("plans control kill from assistant declaration", () => {
+    expect(parseAssistantToolDeclaration("我来调用控制工具：取消当前工具调用。")).toMatchObject({
+      action: "tool_call",
+      tool: "control.kill"
+    });
+  });
+
+  it("rejects non-whitelisted assistant phrasing", () => {
+    expect(parseAssistantToolDeclaration("我来帮你看看地图。")).toMatchObject({
+      action: "no_action"
+    });
+  });
+
   it("normalizes client tool results", () => {
     const runtime = new DemoToolRuntime();
-    const decision = runtime.plan("导航到北京南站");
+    const decision = runtime.plan("我来调用导航工具：导航到北京南站。");
     if (decision.action !== "tool_call") throw new Error("expected tool call");
     const call = runtime.start("turn-1", decision);
 
-    expect(
-      runtime.resolve(call, {
-        toolCallId: call.toolCallId,
-        summary: "真实导航已开始",
-        visibleResult: "路线已显示在金工小子地图上"
-      })
-    ).toMatchObject({
+    const normalized = runtime.resolve(call, {
+      toolCallId: call.toolCallId,
+      summary: "真实导航已开始",
+      visibleResult: "路线已显示在金工小子地图上"
+    });
+
+    expect(normalized).toMatchObject({
       toolCallId: call.toolCallId,
       tool: "navigation.start",
       status: "success",
       origin: "client",
       summary: "真实导航已开始"
     });
+    expect(runtime.hasRunningCall()).toBe(false);
   });
 
   it("drops superseded tool results", async () => {
     const runtime = new DemoToolRuntime();
-    const decision = runtime.plan("打开地图");
+    const decision = runtime.plan("我来调用地图工具：打开地图。");
     if (decision.action !== "tool_call") throw new Error("expected tool call");
     const call = runtime.start("turn-1", decision);
     runtime.markPossiblySuperseded();
 
     await expect(runtime.execute(call.toolCallId)).resolves.toBeNull();
+  });
+
+  it("cancels a running tool call", () => {
+    const runtime = new DemoToolRuntime();
+    const decision = runtime.plan("我来调用导航工具：导航到北京南站。");
+    if (decision.action !== "tool_call") throw new Error("expected tool call");
+    runtime.start("turn-1", decision);
+
+    expect(runtime.cancelRunningCall()).toMatchObject({
+      tool: "control.kill",
+      summary: "刚才的工具调用已取消"
+    });
+    expect(runtime.hasRunningCall()).toBe(false);
+  });
+
+  it("reports no running call for kill without pending work", () => {
+    const runtime = new DemoToolRuntime();
+    expect(runtime.cancelRunningCall()).toMatchObject({
+      tool: "control.kill",
+      summary: "当前没有正在执行的工具调用"
+    });
   });
 });

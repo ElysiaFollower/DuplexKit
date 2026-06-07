@@ -5,13 +5,11 @@ import WebSocket from "ws";
 import type { AppConfig } from "./config.js";
 import { getRuntimeSettings } from "./runtimeSettings.js";
 import {
-  clarificationPrompt,
   DemoToolRuntime,
   type ToolCallState,
   type ToolRequest,
   type ToolResult,
   toolResultPrompt,
-  toolStartedPrompt,
   type ToolResultInput
 } from "./toolPlanner.js";
 import { normalizeToolResultInput, StopControlSchema, ToolResultInputSchema, toToolRequestPayload } from "./protocol.js";
@@ -99,7 +97,6 @@ class VolcRealtimeBridge {
   private readonly tools = new DemoToolRuntime();
   private latestTranscript = "";
   private currentQuestionId = "";
-  private suppressDefaultReply = false;
   private currentAudioAllowed = true;
   private pendingToolCalls = new Map<string, PendingToolInvocation>();
 
@@ -224,18 +221,16 @@ class VolcRealtimeBridge {
       this.latestTranscript = "";
       this.text = "";
       this.currentQuestionId = extractId(parsed.payload, "question_id") || crypto.randomUUID();
-      this.suppressDefaultReply = false;
       this.currentAudioAllowed = true;
-      this.tools.markPossiblySuperseded();
       this.sendJson({ type: "asr_start", questionId: this.currentQuestionId });
     }
     if (parsed.event === events.asrEnd) {
+      this.sendJson({ type: "message_end", role: "user", reason: "asr_end", questionId: this.currentQuestionId });
       this.sendJson({ type: "asr_end", questionId: this.currentQuestionId });
-      void this.runPlanner();
     }
     if (parsed.event === events.ttsStart) {
       const ttsType = extractId(parsed.payload, "tts_type");
-      this.currentAudioAllowed = !this.suppressDefaultReply || ttsType === "chat_tts_text" || ttsType === "external_rag";
+      this.currentAudioAllowed = true;
       this.sendJson({
         type: "tts_start",
         replyId: extractId(parsed.payload, "reply_id"),
@@ -243,9 +238,21 @@ class VolcRealtimeBridge {
         suppressed: !this.currentAudioAllowed
       });
     }
-    if (parsed.event === events.ttsSentenceEnd) this.sendJson({ type: "tts_sentence_end" });
-    if (parsed.event === events.ttsEnd) this.sendJson({ type: "tts_end" });
-    if (parsed.event === events.llmTextEnd) this.sendJson({ type: "llm_end" });
+    if (parsed.event === events.ttsSentenceEnd) {
+      this.sendJson({ type: "message_end", role: "assistant", reason: "tts_sentence_end" });
+      this.sendJson({ type: "tts_sentence_end" });
+    }
+    if (parsed.event === events.ttsEnd) {
+      this.sendJson({ type: "message_end", role: "audio", reason: "tts_end" });
+      this.sendJson({ type: "tts_end" });
+    }
+    if (parsed.event === events.llmTextEnd) {
+      const assistantResponse = this.text.trim();
+      this.text = "";
+      this.sendJson({ type: "message_end", role: "assistant", reason: "llm_end" });
+      this.sendJson({ type: "llm_end" });
+      void this.runPlanner(assistantResponse);
+    }
 
     if (parsed.event === events.asrResponse) {
       const transcript = extractTranscript(parsed.payload);
@@ -268,32 +275,30 @@ class VolcRealtimeBridge {
     }
   }
 
-  private async runPlanner() {
-    const transcript = this.latestTranscript.trim();
+  private async runPlanner(assistantResponse: string) {
     const turnId = this.currentQuestionId || crypto.randomUUID();
-    const decision = this.tools.plan(transcript);
-    this.sendJson({ type: "planner", transcript, decision });
-
-    if (decision.action === "ask_clarification") {
-      this.suppressDefaultReply = true;
-      this.currentAudioAllowed = false;
-      this.sendChatTtsText(decision.question, "ask_clarification");
-      this.sendJson({ type: "tool", phase: "clarification", prompt: clarificationPrompt(decision) });
-      return;
-    }
+    const decision = this.tools.plan(assistantResponse);
+    this.sendJson({ type: "planner", source: "assistant_response", assistantResponse, decision });
 
     if (decision.action !== "tool_call") return;
 
-    this.suppressDefaultReply = true;
-    this.currentAudioAllowed = false;
+    if (decision.tool === "control.kill") {
+      this.resolveControlKill();
+      return;
+    }
+
+    if (this.tools.hasRunningCall() || this.pendingToolCalls.size > 0) {
+      this.sendJson({ type: "tool", phase: "rejected", reason: "tool_pending", decision });
+      this.sendChatTtsText("上个工具调用尚未结束，请稍后。", "tool_rejected");
+      return;
+    }
+
     const call = this.tools.start(turnId, decision);
     const request = this.buildToolRequest(call, decision.spoken);
     const timeout = setTimeout(() => void this.resolvePendingToolCall(call.toolCallId), 1800);
     this.pendingToolCalls.set(call.toolCallId, { call, timeout, state: "waiting" });
     this.sendJson({ type: "tool", phase: "started", call });
     this.sendJson(toToolRequestPayload(request));
-    this.sendJson({ type: "tool", phase: "started_prompt", prompt: toolStartedPrompt(call, decision.spoken) });
-    this.sendChatTtsText(decision.spoken, "tool_started");
   }
 
   private handleToolResult(result: ToolResultInput) {
@@ -328,10 +333,21 @@ class VolcRealtimeBridge {
     this.finalizeToolResult(result);
   }
 
+  private resolveControlKill() {
+    for (const pending of this.pendingToolCalls.values()) {
+      clearTimeout(pending.timeout);
+      pending.state = "resolved";
+    }
+    this.pendingToolCalls.clear();
+    const result = this.tools.cancelRunningCall();
+    this.sendJson({ type: "tool", phase: "result", result });
+    this.sendChatTtsText(`${result.summary}。`, "tool_result");
+  }
+
   private finalizeToolResult(result: ToolResult) {
     this.sendJson({ type: "tool", phase: "result", result });
     this.sendJson({ type: "tool", phase: "result_prompt", prompt: toolResultPrompt(result) });
-    this.sendChatTtsText(`好了，${result.summary}。`, "tool_result");
+    this.sendChatTtsText(`刚才的工具调用结果出来了，${result.summary}。`, "tool_result");
   }
 
   private buildToolRequest(call: ToolCallState, spoken: string): ToolRequest {
@@ -341,7 +357,7 @@ class VolcRealtimeBridge {
       tool: call.tool,
       args: call.args,
       spoken,
-      prompt: toolStartedPrompt(call, spoken)
+      prompt: ""
     };
   }
 

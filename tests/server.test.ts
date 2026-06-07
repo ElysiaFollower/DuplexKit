@@ -73,10 +73,26 @@ describe("server", () => {
 
     const response = await app.inject({ method: "GET", url: "/api/tools" });
     expect(response.statusCode).toBe(200);
-    expect(response.json().tools.map((tool: { name: string }) => tool.name)).toContain("map.open");
+    const body = response.json();
+    expect(body.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      "map.open",
+      "map.close",
+      "map.set_origin",
+      "map.set_destination",
+      "navigation.start"
+    ]);
     expect(response.json().promptTemplates.length).toBeGreaterThan(0);
-    expect(response.json().realtimeProtocol.toolNames).toContain("map.close");
-    expect(response.json().realtimeProtocol.clientMessages[0].type).toBe("tool_result");
+    expect(body.realtimeProtocol.appToolNames).toEqual([
+      "map.open",
+      "map.close",
+      "map.set_origin",
+      "map.set_destination",
+      "navigation.start"
+    ]);
+    expect(body.realtimeProtocol.internalControlToolNames).toEqual(["control.kill"]);
+    expect(body.realtimeProtocol.textBoundaries.messageEndType).toBe("message_end");
+    expect(body.realtimeProtocol.clientMessages[0].type).toBe("tool_result");
+    expect(body.realtimeProtocol.serverMessages.map((message: { type: string }) => message.type)).toContain("message_end");
   });
 
   it("saves structured session logs inside the repo", async () => {

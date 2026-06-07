@@ -24,17 +24,21 @@ npm run dev
 
 ## Tool Demo
 
-当前服务带一个规则版后端 Planner，用于把语音 transcript 转成地图/导航工具请求。真实地图由应用端执行；本仓库浏览器 demo 会自动回传模拟 `tool_result`，方便本地验证：
+当前服务带一个规则版后端 Planner，用于把语音模型的固定工具声明转成地图/导航工具请求。真实地图由应用端执行；本仓库浏览器 demo 会自动回传模拟 `tool_result`，方便本地验证。
 
-- “打开地图”
-- “关闭地图”
-- “设置终点北京南站”
-- “导航到北京南站”
-- “导航到我的办公室”
+工具调用不再由用户 ASR transcript 直接触发。语音模型需要单独用固定句式说出工具声明，例如：
 
-命中工具后，后端会记录 `planner -> tool_request -> tool_result`，并用实时语音链路播出“我来...”和“好了...”反馈。用户开口时，前端收到 `ASRInfo` 会立即清掉排队播放。
+- “我来调用地图工具：打开地图。”
+- “我来调用地图工具：关闭地图。”
+- “我来调用地图工具：设置终点为北京南站。”
+- “我来调用导航工具：导航到北京南站。”
+- “我来调用控制工具：取消当前工具调用。”
 
-当前 demo 为保证可听效果，`tool_started` 和 `tool_result` 播报使用 `300 ChatTTSText`。`502 ChatRAGText` 是后续可继续验证的结果注入路线，不是当前默认实现。
+命中工具后，后端会记录 `assistant_response -> planner -> tool_request -> tool_result`，并通过 `300 ChatTTSText` 播报“刚才的工具调用结果出来了，...”。用户开口时，前端收到 `ASRInfo` 会立即清掉排队播放。
+
+当前 demo 的工具结果播报使用 `300 ChatTTSText`；用户已验证该通道可进入后续语音模型上下文。`502 ChatRAGText` 当前验证无效，不作为 MVP 路线。
+
+小程序/外部前端对接协议见 [docs/integration/frontend-protocol.md](docs/integration/frontend-protocol.md)。实时语音主服务是长期 WebSocket；HTTP 接口只用于 health、工具/协议元数据和调试日志。
 
 ## Debug Panels
 
@@ -82,12 +86,16 @@ Browser -> `/api/realtime`：
 ```sh
 ./scripts/harness-check.sh
 npm test
+npm run fixtures:audio
+npm run test:realtime-fixtures
 npm run build
 npm run smoke:local
 npm run config:check
 npm run smoke:realtime
 npm run smoke:bridge
 ```
+
+`npm run test:realtime-fixtures` 是显式真实模型回归：它读取 `tests/assets/scenarios.json` 和 `tests/assets/*.wav`，启动本地服务，把 fixture 音频按 realtime WebSocket chunk 发送到 `/api/realtime`，然后检查 transcript、assistant 文本、`tool_request` 和 `tool_result`。默认 `npm test` 不调用火山服务，只校验本地规则和 fixture 配置。
 
 ## API
 
@@ -97,6 +105,7 @@ npm run smoke:bridge
 - 浏览器上行音频 binary。
 - 后端下行 JSON 事件和音频 binary。
 - 后端发送 `tool_request` 时，应用端应执行真实地图动作并回传 `tool_result`。
+- 后端会发送 `message_end` 作为用户/assistant 文本边界，前端可据此换行。
 
 `tool_request` 示例：
 

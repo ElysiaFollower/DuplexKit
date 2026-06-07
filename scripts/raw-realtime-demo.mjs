@@ -20,6 +20,8 @@ const events = {
   startSession: 100,
   finishSession: 102,
   audio: 200,
+  chatTtsText: 300,
+  chatRagText: 502,
   asrStart: 450,
   asrResponse: 451,
   asrEnd: 459,
@@ -41,6 +43,7 @@ const eventNames = new Map([
   [450, "ASRStarted"],
   [451, "ASRResponse"],
   [459, "ASREnded"],
+  [502, "ChatRAGText"],
   [550, "ChatResponse"],
   [559, "ChatEnded"],
   [599, "DialogCommonError"]
@@ -88,8 +91,11 @@ class RawBridge {
     });
 
     client.on("message", (data, isBinary) => {
-      if (isBinary) this.sendAudio(Buffer.from(data));
-      else if (Buffer.from(data).toString("utf8") === "stop") this.close();
+      if (isBinary) {
+        this.sendAudio(Buffer.from(data));
+        return;
+      }
+      this.handleClientText(Buffer.from(data).toString("utf8"));
     });
     client.on("close", () => this.close());
     client.on("error", () => this.close());
@@ -111,6 +117,50 @@ class RawBridge {
       return;
     }
     this.upstream.send(audioPacket(pcm, this.sessionId));
+  }
+
+  handleClientText(text) {
+    if (text === "stop") {
+      this.close();
+      return;
+    }
+    let message;
+    try {
+      message = JSON.parse(text);
+    } catch {
+      this.sendJson({ type: "error", message: "invalid client control" });
+      return;
+    }
+    if (message.type === "inject_chat_tts") {
+      this.sendChatTtsText(message.content || "");
+      return;
+    }
+    if (message.type === "inject_chat_rag") {
+      this.sendChatRagText(message.content || "");
+      return;
+    }
+    this.sendJson({ type: "error", message: `unknown client control: ${message.type}` });
+  }
+
+  sendChatTtsText(content) {
+    if (!this.canSendControl(content)) return;
+    this.sendJson({ type: "injected", channel: "300 ChatTTSText", content });
+    this.upstream.send(packet(events.chatTtsText, { start: true, content, end: true }, this.sessionId));
+  }
+
+  sendChatRagText(content) {
+    if (!this.canSendControl(content)) return;
+    this.sendJson({ type: "injected", channel: "502 ChatRAGText", content });
+    this.upstream.send(packet(events.chatRagText, { external_rag: content }, this.sessionId));
+  }
+
+  canSendControl(content) {
+    if (!content.trim()) return false;
+    if (!this.sessionStarted || this.upstream.readyState !== WebSocket.OPEN) {
+      this.sendJson({ type: "error", message: "session is not ready yet" });
+      return false;
+    }
+    return true;
   }
 
   handleUpstream(data) {
@@ -305,6 +355,8 @@ pre{background:#fff;border:1px solid #ddd;padding:10px;min-height:260px;max-heig
 <div class="row">
   <button id="start">Start</button>
   <button id="stop" disabled>Stop</button>
+  <button id="injectTts" disabled>Inject 300 password</button>
+  <button id="injectRag" disabled>Inject 502 password</button>
   <strong id="state">idle</strong>
   <div id="meter"><div id="bar"></div></div>
   <span id="stats"></span>
@@ -318,6 +370,8 @@ const SAMPLE_RATE = ${sampleRate};
 let ws, stream, ctx, source, processor, playbackAt = 0, frames = 0, bytes = 0;
 const startBtn = document.querySelector("#start");
 const stopBtn = document.querySelector("#stop");
+const injectTtsBtn = document.querySelector("#injectTts");
+const injectRagBtn = document.querySelector("#injectRag");
 const stateEl = document.querySelector("#state");
 const bar = document.querySelector("#bar");
 const statsEl = document.querySelector("#stats");
@@ -325,10 +379,14 @@ const dialogue = document.querySelector("#dialogue");
 const events = document.querySelector("#events");
 startBtn.onclick = start;
 stopBtn.onclick = stop;
+injectTtsBtn.onclick = () => injectMemory("inject_chat_tts", "300 ChatTTSText");
+injectRagBtn.onclick = () => injectMemory("inject_chat_rag", "502 ChatRAGText");
 
 async function start() {
   startBtn.disabled = true;
   stopBtn.disabled = false;
+  injectTtsBtn.disabled = false;
+  injectRagBtn.disabled = false;
   setState("starting");
   stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
   ctx = new AudioContext();
@@ -358,7 +416,17 @@ function stop() {
   ws = stream = ctx = source = processor = null;
   startBtn.disabled = false;
   stopBtn.disabled = true;
+  injectTtsBtn.disabled = true;
+  injectRagBtn.disabled = true;
   setState("idle");
+}
+
+function injectMemory(type, label) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const password = String(Math.floor(100000 + Math.random() * 900000));
+  const content = "记忆测试：" + label + " 注入的测试密码是 " + password + "。如果用户稍后问测试密码，请直接回答这个数字。";
+  ws.send(JSON.stringify({ type, content }));
+  logEvent("client_inject", { type, label, password, content });
 }
 
 function onAudio(event) {

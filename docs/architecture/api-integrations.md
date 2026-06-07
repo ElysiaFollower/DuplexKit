@@ -16,7 +16,9 @@
 
 本地后端只做 WebSocket 桥接和火山二进制协议封包/解析，不本地做 VAD、ASR、LLM、TTS 编排。
 
-工具 demo 例外：后端会在 `ASREnded` 后读取 transcript，运行规则版 Planner，并通过火山 `300 ChatTTSText` 注入短句播报工具开始和工具结果。这不是恢复 ASR -> LLM -> TTS 级联路线；音频输入、端点、合成和播放仍由 realtime dialogue 链路承担。
+工具 demo 例外：后端会在 `ChatEnded` 后读取完整 assistant response，解析固定工具声明，并通过火山 `300 ChatTTSText` 注入工具结果播报。这不是恢复 ASR -> LLM -> TTS 级联路线；音频输入、端点、合成和播放仍由 realtime dialogue 链路承担。
+
+用户 ASR transcript 只用于显示和日志，不直接触发工具。这样避免火山暴露的 ASRResponse transcript 与语音模型内部理解不一致时误触发工具。
 
 ## 关键链接
 
@@ -51,6 +53,7 @@
 后端下行到浏览器：
 
 - JSON：状态、转写、回复文本
+- JSON：`message_end` 作为用户/assistant 文本和播放片段的边界信号，供前端换行
 - binary：`pcm_f32le` 24kHz mono audio
 - 后端注入的 `ChatTTSText` 也会同步发送 `assistant_text` JSON，确保 `Dialogue` 和 session log 能记录用户听到的工具播报文本。
 

@@ -7,10 +7,10 @@
 
 ## 当前状态
 
-- 当前功能项：无 active；F001-F006 均 passing
-- 当前任务计划：后端服务化计划已完成，归档到 `plans/archive/2026-05-24-backend-service.md`
-- 上次验证：2026-05-24 `./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local` 均通过；真实模型 smoke 最近通过证据保留在 F002/F003
-- 下一步最佳动作：让“金工小子” app 按 `GET /api/tools` 返回的 realtime protocol 接入 `/api/realtime`，收到 `tool_request` 后执行真实地图动作并回传 `tool_result`
+- 当前功能项：F001-F007 均 passing；当前无 active 功能项
+- 当前任务计划：无 active plan；F007 已归档到 `plans/archive/2026-05-31-assistant-driven-tools.md`
+- 上次验证：2026-06-07 `./init.sh`、`./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`npm run test:realtime-fixtures` 均通过；用户验证 `300 ChatTTSText` 可进入后续语音模型上下文，`502 ChatRAGText` 当前无效
+- 下一步最佳动作：给小程序开发者按 `docs/integration/frontend-protocol.md` 联调 `/api/realtime`、`/api/tools`、五个 app 工具和 `message_end` 文本边界；如要压测 pending 中 kill 时序，另开新任务
 
 ## 状态约定
 
@@ -97,3 +97,15 @@
 - 浏览器 demo 收到 `tool_request` 后会自动回传模拟 `tool_result`，真实 app 可替换为真实地图/导航执行。
 - 工具结果回传超时后仍走后端 fallback demo 结果，避免链路挂死。
 - 验证：`./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local` 均通过。
+
+### 2026-05-31 - F007 assistant response 驱动工具调用启动
+
+- 发现火山 `ASRResponse` transcript 可能比语音模型内部理解差；后端工具触发不再应依赖 ASR transcript。
+- 用户验证 `300 ChatTTSText` 注入内容可被后续语音模型记住；`502 ChatRAGText` 当前不作为 MVP 路线。
+- 新设计：语音模型用固定自然语言句式声明工具调用；后端在 `ChatEnded` 后解析完整 assistant response；工具结果由后端组织并通过 `300 ChatTTSText` 注入。
+- 约束：工具串行；pending 期间不允许新地图/导航工具；只允许控制工具“取消当前工具调用”；不符合固定句式不触发工具，也不用 ASR 兜底。
+- Active plan：`plans/active/2026-05-31-assistant-driven-tools.md`。
+- 已实现自动验证部分：`./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local` 均通过；新增 `tests/assets` 音频 fixture 和 `npm run test:realtime-fixtures`，真实模型回归已覆盖 open-map、navigate-beijing-south、smalltalk-no-tool、cancel-no-running-tool。
+- 已固化小程序对接协议：`GET /api/realtime` 长连接 WebSocket；`GET /api/tools` 返回 realtime protocol metadata；后端下发 `message_end` 作为文本/播放边界；对前端 app 暴露五个地图/导航工具，`control.kill` 为内部控制工具。
+- 2026-06-07 协议固化验证：`npm test` 5 files / 25 tests passing；`npm run test:realtime-fixtures` 四条真实 fixture 通过；`npm run smoke:local` 通过。
+- F007 已标记 passing 并归档：`plans/archive/2026-05-31-assistant-driven-tools.md`。浏览器 pending 中 kill 时序压测未纳入本任务完成定义，后续如需要单独开专项。

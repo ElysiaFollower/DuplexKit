@@ -1,11 +1,10 @@
 import crypto from "node:crypto";
+import { TOOL_NAMES } from "./protocol.js";
 
 export type PlannerDecision =
   | { action: "no_action"; reason: string }
   | { action: "ask_clarification"; missing: string[]; question: string }
   | { action: "tool_call"; tool: ToolName; args: Record<string, string>; spoken: string };
-
-export const TOOL_NAMES = ["map.open", "map.close", "map.set_origin", "map.set_destination", "navigation.start"] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -56,6 +55,13 @@ export const TOOL_DEFINITIONS = [
       required: []
     },
     examples: ["导航到北京南站", "启动导航"]
+  },
+  {
+    name: "control.kill",
+    status: "bridge",
+    description: "取消当前正在执行的工具调用。无需参数。",
+    parameters: { type: "object", properties: {}, required: [] },
+    examples: ["取消当前工具调用"]
   }
 ] as const;
 
@@ -125,51 +131,39 @@ export class DemoToolRuntime {
   private readonly map: MapState = { opened: false, navigating: false };
   private readonly running = new Map<string, ToolCallState>();
 
-  plan(transcript: string): PlannerDecision {
-    const text = normalize(transcript);
-    if (!text) return { action: "no_action", reason: "empty transcript" };
+  plan(assistantResponse: string): PlannerDecision {
+    return parseAssistantToolDeclaration(assistantResponse);
+  }
 
-    if (text.includes("关闭地图") || text.includes("收起地图") || text.includes("关掉地图")) {
-      return { action: "tool_call", tool: "map.close", args: {}, spoken: "我来关闭地图。" };
-    }
+  hasRunningCall() {
+    return this.running.size > 0;
+  }
 
-    if (text.includes("办公室") && (text.includes("我") || text.includes("我的"))) {
+  cancelRunningCall(): ToolResult {
+    const call = this.running.values().next().value as ToolCallState | undefined;
+    if (!call) {
       return {
-        action: "ask_clarification",
-        missing: ["user_identity", "office_location"],
-        question: "您是 Ely 吗？办公室是中关村那间吗？"
+        toolCallId: crypto.randomUUID(),
+        tool: "control.kill",
+        status: "success",
+        summary: "当前没有正在执行的工具调用",
+        visibleResult: "没有正在执行的工具调用",
+        origin: "fallback",
+        debugNote: "control.kill: no running tool call"
       };
     }
-
-    if (text.includes("打开地图") || text === "地图" || text.includes("打开3d地图")) {
-      return { action: "tool_call", tool: "map.open", args: {}, spoken: "我来打开地图。" };
-    }
-
-    const origin = extractPlace(text, ["设置起点", "起点设为", "起点设置为", "从"]);
-    if (origin) {
-      return {
-        action: "tool_call",
-        tool: "map.set_origin",
-        args: { place: origin },
-        spoken: `我来把起点设为${origin}。`
-      };
-    }
-
-    const destination = extractDestination(text);
-    if (destination && (text.includes("导航") || text.includes("去") || text.includes("终点"))) {
-      return {
-        action: "tool_call",
-        tool: text.includes("导航") ? "navigation.start" : "map.set_destination",
-        args: { place: destination },
-        spoken: text.includes("导航") ? `我来导航到${destination}。` : `我来把终点设为${destination}。`
-      };
-    }
-
-    if (text.includes("开始导航") || text.includes("启动导航")) {
-      return { action: "tool_call", tool: "navigation.start", args: {}, spoken: "我来启动导航。" };
-    }
-
-    return { action: "no_action", reason: "no demo tool intent" };
+    call.superseded = true;
+    call.status = "dropped";
+    this.running.delete(call.toolCallId);
+    return {
+      toolCallId: call.toolCallId,
+      tool: "control.kill",
+      status: "success",
+      summary: "刚才的工具调用已取消",
+      visibleResult: `已取消 ${call.tool}`,
+      origin: "fallback",
+      debugNote: `control.kill: cancelled ${call.tool}`
+    };
   }
 
   start(turnId: string, decision: Extract<PlannerDecision, { action: "tool_call" }>) {
@@ -262,6 +256,18 @@ export class DemoToolRuntime {
       };
     }
 
+    if (call.tool === "control.kill") {
+      return {
+        toolCallId: call.toolCallId,
+        tool: call.tool,
+        status: "success",
+        summary: "当前没有正在执行的工具调用",
+        visibleResult: "没有正在执行的工具调用",
+        origin: "fallback",
+        debugNote: "fallback control.kill: no running tool call"
+      };
+    }
+
     this.map.opened = true;
     if (call.args.place) this.map.destination = call.args.place;
     this.map.navigating = true;
@@ -278,6 +284,8 @@ export class DemoToolRuntime {
   }
 
   resolve(toolCall: ToolCallState, result: ToolResultInput): ToolResult {
+    toolCall.status = "completed";
+    this.running.delete(toolCall.toolCallId);
     return {
       toolCallId: result.toolCallId,
       tool: result.tool || toolCall.tool,
@@ -288,6 +296,59 @@ export class DemoToolRuntime {
       debugNote: result.debugNote || "client tool result"
     };
   }
+}
+
+export function parseAssistantToolDeclaration(assistantResponse: string): PlannerDecision {
+  const text = normalizeDeclaration(assistantResponse);
+  if (!text) return { action: "no_action", reason: "empty assistant response" };
+
+  if (text === "我来调用地图工具:打开地图") {
+    return { action: "tool_call", tool: "map.open", args: {}, spoken: "我来调用地图工具：打开地图。" };
+  }
+
+  if (text === "我来调用地图工具:关闭地图") {
+    return { action: "tool_call", tool: "map.close", args: {}, spoken: "我来调用地图工具：关闭地图。" };
+  }
+
+  const origin = exactValue(text, "我来调用地图工具:设置起点为");
+  if (origin) {
+    return {
+      action: "tool_call",
+      tool: "map.set_origin",
+      args: { place: origin },
+      spoken: `我来调用地图工具：设置起点为${origin}。`
+    };
+  }
+
+  const destination = exactValue(text, "我来调用地图工具:设置终点为");
+  if (destination) {
+    return {
+      action: "tool_call",
+      tool: "map.set_destination",
+      args: { place: destination },
+      spoken: `我来调用地图工具：设置终点为${destination}。`
+    };
+  }
+
+  const navigationTarget = exactValue(text, "我来调用导航工具:导航到");
+  if (navigationTarget) {
+    return {
+      action: "tool_call",
+      tool: "navigation.start",
+      args: { place: navigationTarget },
+      spoken: `我来调用导航工具：导航到${navigationTarget}。`
+    };
+  }
+
+  if (text === "我来调用导航工具:开始导航") {
+    return { action: "tool_call", tool: "navigation.start", args: {}, spoken: "我来调用导航工具：开始导航。" };
+  }
+
+  if (text === "我来调用控制工具:取消当前工具调用") {
+    return { action: "tool_call", tool: "control.kill", args: {}, spoken: "我来调用控制工具：取消当前工具调用。" };
+  }
+
+  return { action: "no_action", reason: "assistant response did not match tool declaration grammar" };
 }
 
 export function toolStartedPrompt(call: ToolCallState, spoken: string) {
@@ -324,23 +385,15 @@ export function clarificationPrompt(decision: Extract<PlannerDecision, { action:
   ].join("\n");
 }
 
-function normalize(text: string) {
-  return text.replace(/\s+/g, "").replace(/[，。！？,.!?]/g, "");
+function normalizeDeclaration(text: string) {
+  return text.replace(/\s+/g, "").replace(/：/g, ":").replace(/[。！？,.!?]+$/g, "");
 }
 
-function extractDestination(text: string) {
-  return extractPlace(text, ["设置终点", "终点设为", "终点设置为", "导航到", "带我去", "去"]);
-}
-
-function extractPlace(text: string, markers: string[]) {
-  for (const marker of markers) {
-    const index = text.indexOf(marker);
-    if (index < 0) continue;
-    const value = text.slice(index + marker.length).replace(/^(到|为|去)/, "");
-    const place = value.slice(0, 24);
-    if (place) return place;
-  }
-  return "";
+function exactValue(text: string, prefix: string) {
+  if (!text.startsWith(prefix)) return "";
+  const value = text.slice(prefix.length);
+  if (!value || value.includes(":")) return "";
+  return value.slice(0, 40);
 }
 
 function delay(ms: number) {

@@ -7,7 +7,9 @@ import { getRuntimeSettings, updateRuntimeSettings } from "./runtimeSettings.js"
 import { saveSessionLog, SessionLogPayload } from "./sessionLogs.js";
 import { TOOL_DEFINITIONS, TOOL_PROMPT_TEMPLATES } from "./toolPlanner.js";
 import { attachVolcRealtimeBridge } from "./volcRealtime.js";
-import { TOOL_NAMES } from "./toolPlanner.js";
+import { APP_TOOL_NAMES, buildRealtimeProtocol } from "./protocol.js";
+
+const appToolNameSet = new Set<string>(APP_TOOL_NAMES);
 
 export function buildServer(config: AppConfig = loadConfig()) {
   const app = Fastify({
@@ -49,43 +51,9 @@ export function buildServer(config: AppConfig = loadConfig()) {
   }));
 
   app.get("/api/tools", async () => ({
-    tools: TOOL_DEFINITIONS,
+    tools: TOOL_DEFINITIONS.filter((tool) => appToolNameSet.has(tool.name)),
     promptTemplates: TOOL_PROMPT_TEMPLATES,
-    realtimeProtocol: {
-      websocket: "/api/realtime",
-      inputAudio: {
-        transport: "binary websocket frame",
-        format: config.realtime.inputFormat,
-        sampleRate: config.realtime.sampleRate,
-        channels: 1
-      },
-      outputAudio: {
-        transport: "binary websocket frame",
-        format: config.realtime.outputFormat,
-        sampleRate: config.realtime.sampleRate,
-        channels: 1
-      },
-      clientMessages: [
-        {
-          type: "tool_result",
-          description: "应用端完成真实地图/导航动作后回传结果；后端会把结果转成语音反馈。",
-          required: ["toolCallId", "summary"],
-          optional: ["tool", "status", "visibleResult", "debugNote"]
-        },
-        {
-          type: "stop",
-          description: "关闭当前 realtime 会话。"
-        }
-      ],
-      serverMessages: [
-        {
-          type: "tool_request",
-          description: "后端 Planner 请求应用端执行地图/导航动作。",
-          payload: "request: { toolCallId, turnId, tool, args, spoken, prompt }"
-        }
-      ],
-      toolNames: TOOL_NAMES
-    }
+    realtimeProtocol: buildRealtimeProtocol(config.realtime)
   }));
 
   app.post("/api/session-logs", async (request, reply) => {

@@ -26,20 +26,22 @@
 
 `GET /api/tools` 返回工具 registry 和 realtime protocol 元数据，供外部 app 初始化时校验音频格式和工具 schema。
 
+面向小程序/外部前端的稳定协议文档：[../integration/frontend-protocol.md](../integration/frontend-protocol.md)。
+
 ## 工具调用
 
 工具调用不是语音级联路线。当前实现是在原生 realtime 旁边增加后端 Planner：
 
 ```text
-ASREnded transcript
--> 规则版后端 Planner
+ChatEnded assistant response
+-> 固定工具声明解析
 -> tool_request 发给应用端执行真实地图/导航动作
 -> 应用端回传 tool_result；若超时未回传，后端 fallback 执行 demo 结果
--> 300 ChatTTSText 播放 tool_started/tool_result
+-> 300 ChatTTSText 播放 tool_result
 -> 浏览器同步记录 assistant_text 到 Dialogue
 ```
 
-当前 Planner 是规则版，用于稳定输出地图/导航动作；ADR 中保留了未来替换为 LLM Planner 的方向。
+当前 Planner 是规则版，只接受语音模型完整回复中的固定自然语言工具声明；ASR transcript 只用于显示和日志，不直接触发工具。
 
 当前支持工具：
 
@@ -48,6 +50,23 @@ ASREnded transcript
 - `map.set_origin`
 - `map.set_destination`
 - `navigation.start`
+- `control.kill`
+
+其中对前端 app 暴露并要求实现的是前五个地图/导航工具；`control.kill` 是后端内部控制工具，不要求小程序实现地图动作。
+
+固定声明白名单：
+
+```text
+我来调用地图工具：打开地图。
+我来调用地图工具：关闭地图。
+我来调用地图工具：设置起点为{地点}。
+我来调用地图工具：设置终点为{地点}。
+我来调用导航工具：导航到{地点}。
+我来调用导航工具：开始导航。
+我来调用控制工具：取消当前工具调用。
+```
+
+工具串行执行。pending 期间非 `control.kill` 工具会被拒绝并通过 `300 ChatTTSText` 播报“上个工具调用尚未结束，请稍后。”。
 
 `tool_request` payload：
 
@@ -59,8 +78,8 @@ ASREnded transcript
     "turnId": "question_id",
     "tool": "navigation.start",
     "args": { "place": "北京南站" },
-    "spoken": "我来导航到北京南站。",
-    "prompt": "internal debug prompt"
+    "spoken": "我来调用导航工具：导航到北京南站。",
+    "prompt": ""
   }
 }
 ```
@@ -84,3 +103,14 @@ ASREnded transcript
 - `Dialogue`：干净对话列表，包含用户 transcript、模型原生文本，以及后端通过 `ChatTTSText` 注入的工具播报文本。
 - `Session flow`：开发调试流水，包含 ASR、planner、tool、Volc raw event、保存日志事件。
 - `POST /api/session-logs`：保存前端收集的 `dialogue + flow + runtime settings + tool registry + metadata` 到 `logs/session/*.json`。这是调试持久化，不是产品级用户会话历史。
+
+## Realtime Fixture 回归
+
+`tests/assets/scenarios.json` 描述真实模型回归用例；`tests/assets/*.wav` 是 24kHz mono `pcm_s16le` 音频 fixture。
+
+```sh
+npm run fixtures:audio
+npm run test:realtime-fixtures
+```
+
+fixture 测试会启动本地服务，把音频按 100ms chunk 发送到 `/api/realtime`，收集 transcript、assistant 文本、`tool_request`、`tool_result` 和下行音频字节，并按 scenario 断言工具调用是否发生。它依赖 `.env`、网络和火山实时服务，因此不放进默认 `npm test`。
