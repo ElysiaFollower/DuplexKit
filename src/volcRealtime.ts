@@ -122,6 +122,7 @@ class VolcRealtimeBridge {
   private currentAudioAllowed = true;
   private suppressNextChatTtsClientOutput = false;
   private suppressingChatTtsClientOutput = false;
+  private pendingAssistantPlanner: { turnId: string; assistantResponse: string } | null = null;
   private pendingToolCalls = new Map<string, PendingToolInvocation>();
 
   constructor(private readonly client: ClientSocket, private readonly config: RealtimeConfig) {
@@ -313,6 +314,7 @@ class VolcRealtimeBridge {
       this.currentAudioAllowed = true;
       this.suppressNextChatTtsClientOutput = false;
       this.suppressingChatTtsClientOutput = false;
+      this.pendingAssistantPlanner = null;
       this.trace("upstream_to_server", "asr.start", { questionId: this.currentQuestionId });
       this.sendJson({ type: "asr_start", questionId: this.currentQuestionId });
     }
@@ -351,13 +353,22 @@ class VolcRealtimeBridge {
         this.suppressingChatTtsClientOutput = false;
         this.currentAudioAllowed = true;
       }
+      if (this.pendingAssistantPlanner && this.currentAudioAllowed) {
+        const pending = this.pendingAssistantPlanner;
+        this.pendingAssistantPlanner = null;
+        void this.runPlanner(pending.assistantResponse, pending.turnId);
+      }
     }
     if (parsed.event === events.llmTextEnd) {
       const assistantResponse = this.text.trim();
+      const turnId = this.currentQuestionId || crypto.randomUUID();
       this.text = "";
       this.sendJson({ type: "message_end", role: "assistant", reason: "llm_end" });
       this.sendJson({ type: "llm_end" });
-      void this.runPlanner(assistantResponse);
+      if (assistantResponse) {
+        this.pendingAssistantPlanner = { turnId, assistantResponse };
+        this.trace("internal", "planner.deferred_until_tts_end", { turnId, assistantResponse });
+      }
     }
 
     if (parsed.event === events.asrResponse) {
@@ -390,8 +401,7 @@ class VolcRealtimeBridge {
     }
   }
 
-  private async runPlanner(assistantResponse: string) {
-    const turnId = this.currentQuestionId || crypto.randomUUID();
+  private async runPlanner(assistantResponse: string, turnId = this.currentQuestionId || crypto.randomUUID()) {
     const decision = this.tools.plan(assistantResponse);
     this.trace("internal", "planner.decision", { turnId, assistantResponse, decision });
     this.sendJson({ type: "planner", source: "assistant_response", assistantResponse, decision });

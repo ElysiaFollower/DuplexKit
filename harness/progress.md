@@ -350,3 +350,26 @@
   - 真机 app 已通过 WebView DevTools 连接新后端，session `9b2dc984-7db5-4050-9b3e-6e07d553d832`；`npm run debug:realtime-fixture -- open-map` -> HTTP 200，48130 bytes。
   - trace 证明链路为 `planner.decision map.open -> tool.started -> client tool_result 地图已打开 -> server_to_upstream chat_tts_text forwardToClient=false -> chat_tts_client_output_suppressed_start -> audio.output_chunk_suppressed -> chat_tts_client_output_suppressed_end`。
   - 断言 `suppressed_before_suppressed_start=false`，即没有在工具结果注入 TTS 开始前抑制正常音频块。
+
+### 2026-06-13 - F010 真实复测后的工具声明播放和 108-2F03 修复
+
+- 用户真实复测后反馈两个问题：
+  - “我来调用工具...”是模型官方 response，应正常返回/播放；不应被后端隐藏。只应隐藏后端自己注入的工具结果 `ChatTTSText`。
+  - `108-2F03教室` 已经是精确门牌号，却仍被设置成 `108 门厅`。
+- trace session `75768121-c8a0-4b51-bd2b-fe64764af4ee` 复盘结论：
+  - 后端确实没有隐藏 `assistant_text`，但旧时序在 `llm_end` 立刻执行 Planner 和工具结果 `ChatTTSText` 注入；此时官方默认 TTS 可能尚未完整播放，造成工具结果注入和官方 response 播放竞争，用户体感像“我来调用...”没正常说出来。
+  - `1082F03教室` 被 Planner 正确作为 `map.set_destination { place: "1082F03教室" }` 下发给 app；app `roomResolver` 把 `1082F03` 与 `108-2F03` 标准化后能匹配，但短前缀 `108` 对 `108-lobby` 得分并列且更早出现，最终错选 `108 门厅`。
+- 已修复：
+  - 后端 `VolcRealtimeBridge` 将 Planner 执行从 `llm_end` 延后到该轮官方 `tts_end`，先让模型官方 response 正常下发/播放，再发 `tool_request` 和工具结果注入。
+  - `apps/jingongxiaozi/src/duplexkit/roomResolver.ts` 标准化连字符/下划线，并让精确长 room id / roomNo 前缀按长度加权，`108-2F03` 明确压过 `108`。
+  - `DEFAULT_SYSTEM_ROLE` 增加金工小子常用房间列表和门牌号保留规则，提示模型把“108二楼F03教室 / 1082F03教室”规范输出为 `108-2F03多媒体教室`，不要简化为 `108门厅`。
+  - `tests/jingongRoomResolver.test.ts` 新增 `108-2F03教室` 和 `1082F03教室 -> 108-2F03` 回归。
+- 验证：
+  - `npm test -- tests/jingongRoomResolver.test.ts tests/toolPlanner.test.ts` -> 2 files / 20 tests passed。
+  - `npm test` -> 6 files / 37 tests passed。
+  - `npm run build` -> pass。
+  - `cd apps/jingongxiaozi && npm run build` -> pass。
+  - `./scripts/harness-check.sh` -> pass。
+  - Android APK 构建成功，路径 `apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，大小 246M，sha256 `52583ec0e9a30487a7df98db96c987c2f4769eadbf353bf543ab4d8edadac5cf`。
+  - `adb install --no-streaming -r -g -t .../app-universal-debug.apk` 成功，包 `lastUpdateTime=2026-06-13 19:01:09`，权限 granted。
+  - 新后端 + 新 APK 真机 fixture session `3a89832b-bacb-4cd7-812e-e1e39415a4f8`：`open-map` 中官方 response 音频 `audio.output_chunk` 先下发，随后才出现 `planner.deferred_until_tts_end -> planner.decision -> tool.started -> chat_tts_text forwardToClient=false -> chat_tts_client_output_suppressed_start`；事件序号 `firstAudio=50 < plannerDecision=86 < toolStarted=88 < suppressedStart=104`。

@@ -15,4 +15,10 @@ describe("jingongxiaozi room resolver", () => {
     expect(roomId).toBe("114");
     expect(roomLabel(roomId)).toBe("114 空房间");
   });
+
+  it("prefers exact long room ids over shorter parent room prefixes", () => {
+    expect(resolveRoomId("108-2F03教室")).toBe("108-2F03");
+    expect(resolveRoomId("1082F03教室")).toBe("108-2F03");
+    expect(roomLabel(resolveRoomId("1082F03教室"))).toBe("108-2F03 多媒体教室");
+  });
 });

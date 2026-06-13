@@ -12,7 +12,7 @@
 - 分支：`main`
 - 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
 - 当前功能项：F010 `active`
-- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复工具声明解析鲁棒性和金工小子 208/114 房间匹配问题；已修复工具结果语音打断正常播放的问题：工具结果继续走已验证的 `ChatTTSText` 注入上游模型，但默认不把这段注入产生的文本和音频转发给前端。下一步等待用户真实语音复测。
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复工具声明解析鲁棒性和金工小子 208/114/108-2F03 房间匹配问题；已修复工具结果语音打断正常播放的问题：工具结果继续走已验证的 `ChatTTSText` 注入上游模型，但默认不把这段注入产生的文本和音频转发给前端；Planner 现在延后到官方 `tts_end` 后执行，保证“我来调用...”这类模型官方 response 正常播放。下一步等待用户真实语音复测。
 
 ## 当前已验证状态
 
@@ -82,20 +82,28 @@
   - `harness/decisions.md` 已写入约束：关键协议路径未经验证和用户确认不得从 `ChatTTSText` 切到 `ChatRAGText`。
   - 验证：`npm test -- tests/toolPlanner.test.ts tests/server.test.ts` -> 2 files / 25 tests passed；`npm test` -> 6 files / 36 tests passed；`npm run build` -> pass；`./scripts/harness-check.sh` -> pass。
   - 真机 session `9b2dc984-7db5-4050-9b3e-6e07d553d832`：WebView DevTools 点击连接后端，`npm run debug:realtime-fixture -- open-map` -> HTTP 200 / 48130 bytes；trace 显示 `planner.decision map.open -> client tool_result 地图已打开 -> chat_tts_text forwardToClient=false -> chat_tts_client_output_suppressed_start/end`，并验证 `suppressed_before_suppressed_start=false`。
+- 真实复测后的二次修复：
+  - 用户指出“我来调用工具...”是模型官方 response，应正常播放；只应静默后端自己注入的工具结果 `ChatTTSText`。
+  - 最新真实 session `75768121-c8a0-4b51-bd2b-fe64764af4ee` 证明旧后端在 `llm_end` 立刻执行 Planner 和工具结果注入，可能早于官方默认 TTS 完整播放；现已改为 `planner.deferred_until_tts_end`，等官方 `tts_end` 后才发 `tool_request`。
+  - 同一 session 证明 `1082F03教室` 已被后端下发到 app，但 app `roomResolver` 因短前缀 `108` 与长门牌 `108-2F03` 得分并列，错选 `108 门厅`。现已标准化连字符/下划线，并按长 room id/roomNo 前缀加权，锁定 `108-2F03教室` 和 `1082F03教室 -> 108-2F03`。
+  - `DEFAULT_SYSTEM_ROLE` 增加金工小子常用地点列表和门牌号保留规则。
+  - 新 APK：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，246M，sha256 `52583ec0e9a30487a7df98db96c987c2f4769eadbf353bf543ab4d8edadac5cf`，包 `lastUpdateTime=2026-06-13 19:01:09`。
+  - 验证：`npm test -- tests/jingongRoomResolver.test.ts tests/toolPlanner.test.ts` -> 20 passed；`npm test` -> 37 passed；`npm run build` -> pass；`cd apps/jingongxiaozi && npm run build` -> pass；`./scripts/harness-check.sh` -> pass；Android APK build/install -> pass。
+  - 新后端 + 新 APK fixture session `3a89832b-bacb-4cd7-812e-e1e39415a4f8`：`open-map` 事件顺序 `firstAudio=50 < plannerDecision=86 < toolStarted=88 < suppressedStart=104`，证明官方 response 音频先下发，工具结果注入后抑制。
 
 ## 仍损坏或未验证
 
 - 新的浮动控制条已真机复验；用户若仍看到“正在聆听”，大概率是旧界面残留/未刷新，需要重启 app 或确认包更新时间。
 - 麦克风真实连续语音仍需用户继续人工路径。
-- 地图保持修复、工具声明解析修复、208/114 房间匹配修复和工具结果播放抑制修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
+- 地图保持修复、工具声明解析修复、208/114/108-2F03 房间匹配修复、工具结果播放抑制修复和 Planner 延后到 `tts_end` 的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
 - `北京南站` 这类非金工小子室内地点目前仍走 app 既有 fallback 房间，trace 中表现为 `108-2F04 钳工`；这不是 208/114 修复范围，后续若要支持外部地点需单独定义产品行为。
 - fixture 跑完后的 `连接失败 / 重新连接` 是无持续音频输入时的上游 idle close 表现，后续可优化为更温和的 `未连接` 文案，但不阻塞真实语音测试。
 
 ## 清洁状态
 
-- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`，当前 agent 会话中 PID `82675`。
+- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`，当前 agent 会话中 PID `31986`。
 - `logs/device-acceptance/`、`logs/client-debug/`、`logs/realtime-trace/` 为本地证据目录并已 gitignore。
-- 当前工作树包含本轮工具结果播放抑制、Planner 保留字扫描、协议文档和 harness 更新；不要回滚用户或既有改动。
+- 当前工作树包含本轮 Planner 延后执行、108-2F03 resolver、提示词地点列表和 harness 更新；不要回滚用户或既有改动。
 
 ## 下一步最佳动作
 
