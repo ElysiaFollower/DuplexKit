@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { loadConfig } from "../src/config.js";
+import { appendRealtimeTraceLog } from "../src/realtimeTraceLogs.js";
 import { buildServer } from "../src/server.js";
 
 const apps: Array<ReturnType<typeof buildServer>> = [];
@@ -119,5 +122,38 @@ describe("server", () => {
     expect(file.payload.flow[0].payload.phase).toBe("started");
 
     await rm(saved.path, { force: true });
+  });
+
+  it("writes realtime trace logs as session-scoped JSONL", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "duplexkit-trace-"));
+    const file = await appendRealtimeTraceLog(
+      {
+        sessionId: "session-1",
+        at: "2026-06-13T05:00:00.000Z",
+        direction: "internal",
+        event: "planner.decision",
+        payload: {
+          assistantResponse: "我来调用地图工具：设置终点为西门。",
+          decision: { action: "tool_call", tool: "map.set_destination", args: { place: "西门" } }
+        }
+      },
+      root
+    );
+
+    const lines = (await readFile(file, "utf8")).trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      sessionId: "session-1",
+      direction: "internal",
+      event: "planner.decision",
+      payload: {
+        decision: {
+          tool: "map.set_destination",
+          args: { place: "西门" }
+        }
+      }
+    });
+
+    await rm(root, { recursive: true, force: true });
   });
 });

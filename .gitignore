@@ -18,5 +18,7 @@ mobile-demo/src-tauri/gen/android/app/build/
 logs/session/*.json
 logs/client-debug/
 logs/client-debug/*.jsonl
+logs/realtime-trace/
+logs/realtime-trace/*.jsonl
 logs/device-acceptance/
 tmp/

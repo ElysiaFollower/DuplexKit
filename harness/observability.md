@@ -11,6 +11,7 @@
 - 关键用户路径：前端状态出现 `connecting-realtime`、`starting-session`、`listening`、`thinking`、`speaking`。
 - 输入检查：右下角音量条显示浏览器麦克风 RMS。
 - 输出检查：`npm run smoke:bridge` 返回 transcript、assistant text、`audioFormat=pcm_f32le` 和 audioStats。
+- Realtime trace：后端自动追加 `logs/realtime-trace/YYYY-MM-DD.jsonl`，按 `sessionId` 记录 ASR、assistant 文本、Planner 决策、工具请求/结果、ChatTTSText 注入、TTS 边界和错误；不记录原始音频。
 - 错误上下文：WebSocket JSON error event 返回可读错误；不输出密钥。
 
 ## 过程工件

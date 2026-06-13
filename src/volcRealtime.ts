@@ -4,6 +4,7 @@ import type { RawData, WebSocket as ClientSocket } from "ws";
 import WebSocket from "ws";
 import { appendClientDebugLog } from "./clientDebugLogs.js";
 import type { AppConfig } from "./config.js";
+import { appendRealtimeTraceLog, realtimeTraceLogPath, type RealtimeTraceDirection } from "./realtimeTraceLogs.js";
 import { getRuntimeSettings } from "./runtimeSettings.js";
 import {
   DemoToolRuntime,
@@ -136,6 +137,13 @@ class VolcRealtimeBridge {
     });
 
     this.upstream.on("open", () => {
+      this.trace("server_to_upstream", "connection.start", {
+        endpoint: config.endpoint,
+        resourceId: config.resourceId,
+        inputFormat: config.inputFormat,
+        outputFormat: config.outputFormat,
+        sampleRate: config.sampleRate
+      });
       this.sendJson({
         type: "status",
         state: "connecting-realtime",
@@ -148,9 +156,11 @@ class VolcRealtimeBridge {
     this.upstream.on("message", (data) => this.handleUpstreamMessage(toBuffer(data)));
     this.upstream.on("error", (error) => this.fail(error instanceof Error ? error.message : String(error)));
     this.upstream.on("close", () => {
+      this.trace("upstream_to_server", "connection.closed");
       if (!this.closed) this.sendJson({ type: "status", state: "realtime-closed" });
       this.closed = true;
     });
+    this.trace("internal", "bridge.created", { traceFile: realtimeTraceLogPath() });
   }
 
   sendAudio(pcm: ByteBuffer) {
@@ -168,12 +178,14 @@ class VolcRealtimeBridge {
       const message = JSON.parse(raw) as { type?: string };
       const stop = StopControlSchema.safeParse(message);
       if (stop.success) {
+        this.trace("client_to_server", "control.stop");
         this.close();
         return;
       }
 
       const toolResult = ToolResultInputSchema.safeParse(message);
       if (toolResult.success) {
+        this.trace("client_to_server", "tool_result", toolResult.data);
         this.handleToolResult(normalizeToolResultInput(toolResult.data));
         return;
       }
@@ -184,8 +196,10 @@ class VolcRealtimeBridge {
         return;
       }
 
+      this.trace("client_to_server", "control.invalid", { raw });
       this.sendJson({ type: "error", message: "Invalid client control message" });
     } catch {
+      this.trace("client_to_server", "control.invalid_json", { raw });
       this.sendJson({ type: "error", message: "Invalid client control message" });
     }
   }
@@ -197,6 +211,7 @@ class VolcRealtimeBridge {
     if (latestBridgeId === this.sessionId) latestBridgeId = [...activeBridges.keys()].at(-1) || "";
     for (const pending of this.pendingToolCalls.values()) clearTimeout(pending.timeout);
     this.pendingToolCalls.clear();
+    this.trace("internal", "bridge.closed");
     if (this.upstream.readyState === WebSocket.OPEN) {
       this.upstream.send(packet(events.finishSession, {}, this.sessionId));
       this.upstream.send(packet(events.finishConnection, {}));
@@ -210,7 +225,8 @@ class VolcRealtimeBridge {
       connectionStarted: this.connectionStarted,
       sessionStarted: this.sessionStarted,
       closed: this.closed,
-      queuedAudioFrames: this.queuedAudio.length
+      queuedAudioFrames: this.queuedAudio.length,
+      traceFile: realtimeTraceLogPath()
     };
   }
 
@@ -233,12 +249,21 @@ class VolcRealtimeBridge {
   private handleUpstreamMessage(data: Buffer) {
     const parsed = parseResponse(data);
     if (parsed.error) {
+      this.trace("upstream_to_server", "upstream.error", { code: parsed.code, payload: parsed.payload });
       this.fail(`Volcengine error ${parsed.code}: ${parsed.payload}`);
       return;
     }
     if (!this.connectionStarted) {
       this.connectionStarted = true;
       const runtimeSettings = getRuntimeSettings();
+      this.trace("upstream_to_server", "connection.started", {
+        event: parsed.event,
+        eventName: parsed.event ? eventNames.get(parsed.event) : undefined
+      });
+      this.trace("server_to_upstream", "session.start", {
+        speaker: this.config.speaker,
+        speakingStyle: runtimeSettings.speakingStyle
+      });
       this.sendJson({ type: "status", state: "starting-session" });
       this.upstream.send(
         packet(
@@ -264,6 +289,10 @@ class VolcRealtimeBridge {
 
     if (this.connectionStarted && !this.sessionStarted) {
       this.sessionStarted = true;
+      this.trace("upstream_to_server", "session.started", {
+        event: parsed.event,
+        eventName: parsed.event ? eventNames.get(parsed.event) : undefined
+      });
       this.sendJson({ type: "status", state: "listening" });
       for (const pcm of this.queuedAudio.splice(0)) this.sendAudio(pcm);
       return;
@@ -280,6 +309,7 @@ class VolcRealtimeBridge {
       this.text = "";
       this.currentQuestionId = extractId(parsed.payload, "question_id") || crypto.randomUUID();
       this.currentAudioAllowed = true;
+      this.trace("upstream_to_server", "asr.start", { questionId: this.currentQuestionId });
       this.sendJson({ type: "asr_start", questionId: this.currentQuestionId });
     }
     if (parsed.event === events.asrEnd) {
@@ -316,6 +346,7 @@ class VolcRealtimeBridge {
       const transcript = extractTranscript(parsed.payload);
       if (transcript) {
         this.latestTranscript = transcript;
+        this.trace("upstream_to_server", "asr.transcript", { questionId: this.currentQuestionId, text: transcript });
         this.sendJson({ type: "transcript", text: transcript, questionId: this.currentQuestionId });
       }
     }
@@ -324,11 +355,13 @@ class VolcRealtimeBridge {
       const delta = extractTextDelta(parsed.payload);
       if (delta && this.currentAudioAllowed) {
         this.text += delta;
+        this.trace("upstream_to_server", "assistant.delta", { delta, text: this.text });
         this.sendJson({ type: "assistant_text", delta, text: this.text });
       }
     }
 
     if (parsed.event === events.ttsResponse && parsed.rawPayload.length > 0 && this.currentAudioAllowed) {
+      this.trace("upstream_to_server", "audio.output_chunk", { bytes: parsed.rawPayload.length });
       this.client.send(parsed.rawPayload, { binary: true });
     }
   }
@@ -336,6 +369,7 @@ class VolcRealtimeBridge {
   private async runPlanner(assistantResponse: string) {
     const turnId = this.currentQuestionId || crypto.randomUUID();
     const decision = this.tools.plan(assistantResponse);
+    this.trace("internal", "planner.decision", { turnId, assistantResponse, decision });
     this.sendJson({ type: "planner", source: "assistant_response", assistantResponse, decision });
 
     if (decision.action !== "tool_call") return;
@@ -355,6 +389,7 @@ class VolcRealtimeBridge {
     const request = this.buildToolRequest(call, decision.spoken);
     const timeout = setTimeout(() => void this.resolvePendingToolCall(call.toolCallId), 1800);
     this.pendingToolCalls.set(call.toolCallId, { call, timeout, state: "waiting" });
+    this.trace("internal", "tool.started", { call, request });
     this.sendJson({ type: "tool", phase: "started", call });
     this.sendJson(toToolRequestPayload(request));
   }
@@ -362,6 +397,7 @@ class VolcRealtimeBridge {
   private handleToolResult(result: ToolResultInput) {
     const pending = this.pendingToolCalls.get(result.toolCallId);
     if (!pending) {
+      this.trace("internal", "tool.orphan_result", { result });
       this.sendJson({ type: "tool", phase: "orphan_result", result });
       return;
     }
@@ -372,6 +408,7 @@ class VolcRealtimeBridge {
     pending.state = "resolved";
     this.pendingToolCalls.delete(result.toolCallId);
     const normalized = this.tools.resolve(pending.call, result);
+    this.trace("internal", "tool.resolved", { result: normalized });
     this.finalizeToolResult(normalized);
   }
 
@@ -397,6 +434,7 @@ class VolcRealtimeBridge {
     appendClientDebugLog(payload).catch((error: unknown) => {
       console.warn(`[client_debug_log_failed] ${error instanceof Error ? error.message : String(error)}`);
     });
+    this.trace("client_to_server", "client_debug", payload);
   }
 
   private async resolvePendingToolCall(toolCallId: string) {
@@ -406,12 +444,14 @@ class VolcRealtimeBridge {
     const result = await this.tools.execute(toolCallId);
     if (!result) {
       this.pendingToolCalls.delete(toolCallId);
+      this.trace("internal", "tool.dropped", { toolCallId });
       this.sendJson({ type: "tool", phase: "dropped", toolCallId });
       return;
     }
     if (pending.state !== "timed_out") return;
     this.pendingToolCalls.delete(toolCallId);
     pending.state = "resolved";
+    this.trace("internal", "tool.timeout_fallback_resolved", { result });
     this.finalizeToolResult(result);
   }
 
@@ -422,11 +462,13 @@ class VolcRealtimeBridge {
     }
     this.pendingToolCalls.clear();
     const result = this.tools.cancelRunningCall();
+    this.trace("internal", "tool.control_kill", { result });
     this.sendJson({ type: "tool", phase: "result", result });
     this.sendChatTtsText(`${result.summary}。`, "tool_result");
   }
 
   private finalizeToolResult(result: ToolResult) {
+    this.trace("internal", "tool.finalize_result", { result });
     this.sendJson({ type: "tool", phase: "result", result });
     this.sendJson({ type: "tool", phase: "result_prompt", prompt: toolResultPrompt(result) });
     this.sendChatTtsText(`刚才的工具调用结果出来了，${result.summary}。`, "tool_result");
@@ -445,11 +487,13 @@ class VolcRealtimeBridge {
 
   private sendChatRagText(externalRag: string) {
     if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
+    this.trace("server_to_upstream", "chat_rag_text", { externalRag });
     this.upstream.send(packet(events.chatRagText, { external_rag: externalRag }, this.sessionId));
   }
 
   private sendChatTtsText(content: string, source = "server_chat_tts") {
     if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
+    this.trace("server_to_upstream", "chat_tts_text", { source, content });
     this.sendJson({ type: "assistant_text", text: content, source, append: true });
     this.upstream.send(packet(events.chatTtsText, { start: true, content, end: true }, this.sessionId));
   }
@@ -469,12 +513,26 @@ class VolcRealtimeBridge {
   }
 
   private fail(message: string) {
+    this.trace("internal", "bridge.failed", { message });
     this.sendJson({ type: "error", message });
     this.close();
   }
 
   private sendJson(payload: unknown) {
+    this.trace("server_to_client", "json", payload);
     if (this.client.readyState === WebSocket.OPEN) this.client.send(JSON.stringify(payload));
+  }
+
+  private trace(direction: RealtimeTraceDirection, event: string, payload?: unknown) {
+    appendRealtimeTraceLog({
+      sessionId: this.sessionId,
+      at: new Date().toISOString(),
+      direction,
+      event,
+      payload
+    }).catch((error: unknown) => {
+      console.warn(`[realtime_trace_log_failed] ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 }
 

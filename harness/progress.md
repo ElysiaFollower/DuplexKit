@@ -283,3 +283,11 @@
   - WebView DevTools 验证：直接打开 map 后 `isLegacy=true`、`hasLegacyMap=true`、`has3dMap=false`；发送 chat directive 后仍保持地图；`open-map` fixture 后保持 legacy 地图；地图打开后再发 `smalltalk-no-tool` fixture 仍保持 legacy 地图，不弹回对话页。
   - 截图：`logs/device-acceptance/2026-06-13-map-shell-preserve-after-smalltalk.png`。
 - F010 保持 `active`：自动化验收通过；等待用户对新 APK 做真实声音采集体验确认。
+
+### 2026-06-13 - F010 后端 realtime trace 日志补强
+
+- 用户真实语音测试后发现：现有后端日志只能看到 HTTP/WebSocket 和 `client_debug`，无法完整复盘 ASR、assistant response、Planner 决策、工具参数、工具结果和播放边界。
+- 已新增 `logs/realtime-trace/YYYY-MM-DD.jsonl`：按 `sessionId` 记录 `asr.transcript`、`assistant.delta`、`planner.decision`、`tool_request`、客户端 `tool_result`、`chat_tts_text`、TTS/audio 边界、上游错误和 bridge 生命周期。
+- trace 不记录原始音频内容，只记录音频块大小和事件边界，避免日志体积和敏感内容失控。
+- 更新 `docs/integration/frontend-protocol.md` 和 `harness/observability.md`，说明 trace 位置和排查起终点/语音打断问题的读取顺序。
+- 验证：`npm test` -> 5 files / 27 tests passed；`npm run build` -> pass；`./scripts/harness-check.sh` -> pass。

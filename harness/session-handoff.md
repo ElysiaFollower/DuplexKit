@@ -12,7 +12,7 @@
 - 分支：`main`
 - 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
 - 当前功能项：F010 `active`
-- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题，下一步等待用户对新 APK 再做真实声音采集体验确认。
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志，下一步等待用户复测并用 trace 定位工具参数/语音打断问题。
 
 ## 当前已验证状态
 
@@ -53,19 +53,23 @@
   - 新 APK sha256：`aed5bd4f8b5daf222ce86fb73adb56a6d567b1842b58e71de41780f98deb929f`，包 `lastUpdateTime=2026-06-13 12:11:36`。
   - 真机 WebView 验证：Android 默认 `isLegacy=true`、`hasLegacyMap=true`、`has3dMap=false`；地图打开后直接 chat directive 不切走；`open-map` fixture 保持 legacy 地图；地图打开后 `smalltalk-no-tool` fixture 仍保持 legacy 地图。
   - 截图：`logs/device-acceptance/2026-06-13-map-shell-preserve-after-smalltalk.png`
+- Realtime trace 补强：
+  - 新增 `logs/realtime-trace/YYYY-MM-DD.jsonl`，按 `sessionId` 自动记录 ASR transcript、assistant 文本增量、Planner 决策、工具请求/结果、ChatTTSText 注入、TTS/audio 边界和错误。
+  - 不记录原始音频内容，只记录事件边界和音频块大小。
+  - 验证：`npm test` -> 5 files / 27 tests passed；`npm run build` -> pass；`./scripts/harness-check.sh` -> pass。
 
 ## 仍损坏或未验证
 
 - 新的浮动控制条已真机复验；用户若仍看到“正在聆听”，大概率是旧界面残留/未刷新，需要重启 app 或确认包更新时间。
-- 麦克风真实连续语音仍未验证；需要用户拿手机说话完成人工路径。
-- 地图保持修复后的真实声音体验仍待用户确认。
+- 麦克风真实连续语音仍需用户继续人工路径。
+- 地图保持修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
 - fixture 跑完后的 `连接失败 / 重新连接` 是无持续音频输入时的上游 idle close 表现，后续可优化为更温和的 `未连接` 文案，但不阻塞真实语音测试。
 
 ## 清洁状态
 
-- 后端测试进程已停止，5177 无监听。
-- `logs/device-acceptance/`、`logs/client-debug/` 为本地证据目录并已 gitignore。
-- 当前工作树包含本轮修复和此前未提交的 F008/F009/F010 相关改动；不要回滚用户或既有改动。
+- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`。
+- `logs/device-acceptance/`、`logs/client-debug/`、`logs/realtime-trace/` 为本地证据目录并已 gitignore。
+- 当前工作树包含本轮 realtime trace 日志补强改动；不要回滚用户或既有改动。
 
 ## 下一步最佳动作
 
