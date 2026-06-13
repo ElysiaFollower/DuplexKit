@@ -97,6 +97,65 @@
       ],
       "evidence": "2026-06-07: ./scripts/harness-check.sh -> pass, 0 warnings；npm run typecheck -> pass；npm test -> 5 files / 25 tests passing；npm run build -> pass；NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost npm run smoke:local -> local smoke passed on http://127.0.0.1:5188；NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost npm run test:realtime-fixtures -> open-map/navigation/smalltalk/cancel fixtures passed against real realtime model。已固化 docs/integration/frontend-protocol.md、/api/tools protocol metadata、message_end 边界和五个 app 工具。计划已归档到 plans/archive/2026-05-31-assistant-driven-tools.md。",
       "notes": "不引入文本 LLM Planner；不使用 ASR transcript 兜底；不依赖 ASREnded final transcript；502 ChatRAGText 暂不采用；真实 fixture 回归不放入默认 npm test，因为依赖 .env、网络和火山实时服务；小程序只需实现五个 app 工具，control.kill 是后端内部控制工具；pending 中 kill 的浏览器时序压测留作后续专项。"
+    },
+    {
+      "id": "F008",
+      "priority": "P0",
+      "area": "mobile-demo",
+      "title": "移动端后端效果验证 demo",
+      "behavior": "仓库子目录提供一个最小 Tauri + React demo；用户输入 Mac IP + port 后连接 /api/realtime，用一个语音按钮开启/停止连续麦克风推流，展示文本流，并用极简正方形响应五个 app 工具请求后回传 tool_result。",
+      "status": "passing",
+      "verification": [
+        "./scripts/harness-check.sh",
+        "npm test",
+        "npm run build",
+        "cd mobile-demo && npm install && npm run typecheck && npm run build",
+        "cd mobile-demo/src-tauri && cargo check",
+        "cd mobile-demo && npm run tauri -- android build --apk --debug -v",
+        "cd mobile-demo && npx tauri info",
+        "Playwright open http://127.0.0.1:1420"
+      ],
+      "evidence": "2026-06-07: cd mobile-demo && npm install -> added 71 packages, 0 vulnerabilities；npm run typecheck -> pass；npm run build -> Vite build pass, dist/index.html and assets generated；root ./scripts/harness-check.sh -> pass, 0 warnings；root npm test -> 5 files / 25 tests passing；root npm run build -> pass；Playwright opened http://127.0.0.1:1420 and verified first screen renders with backend IP/port, voice button, dialogue area, and square-map tool demo. 2026-06-07 debug follow-up: added client_debug protocol/logging and mobile debug panel; root npm test -> 5 files / 26 tests passing；root npm run build -> pass；mobile-demo npm run typecheck/build -> pass；Playwright verified ?debug=1 shows debug banner and log panel. 2026-06-07 APK follow-up: installed Rust/Android toolchain, added Android microphone permission and Tauri icons, removed unused opener plugin, mobile-demo npm run typecheck/build -> pass, mobile-demo/src-tauri cargo check -> pass, npm run tauri -- android build --apk --debug -v -> BUILD SUCCESSFUL. 2026-06-07 jingongxiaozi calibration: cloned https://github.com/zzw4257/jingongxiaozi.git /tmp/jingongxiaozi successfully; confirmed target app uses Tauri 2 + React 18 + Vite 6 + TypeScript 5.7, Android landscape, debug-only cleartext, BackendDirective/MapDirectRequest mock bridge and no existing realtime WebSocket/getUserMedia client. Aligned mobile-demo dependencies to React 18/Vite 6/TS 5.7, compile/target SDK to 36, default cleartext=false with debug cleartext=true, and added MODIFY_AUDIO_SETTINGS because Wry requests it with RECORD_AUDIO for WebView audio capture. Rebuilt APK path mobile-demo/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk; size 418M; sha256 22c057118f2691824f1df3bbff6cf51878273e4f75acc3b49937b222f836853d; aapt confirmed INTERNET, MODIFY_AUDIO_SETTINGS and RECORD_AUDIO permissions; compileSdk/targetSdk 36.",
+      "notes": "这是后端服务可用性验证 demo，不做真实地图、导航 SDK、生产级移动架构、发布版签名包或后端协议变更。现有协议要求会话打开期间持续发送 24kHz mono pcm_s16le chunk。手机真机麦克风/播放需用户安装 APK 后在同局域网下手测；手机浏览器通过 http://10.x 访问时可能因非 secure context 隐藏 getUserMedia，但原生 Tauri WebView 不走该浏览器限制。"
+    },
+    {
+      "id": "F009",
+      "priority": "P0",
+      "area": "mobile-integration",
+      "title": "金工小子 app 直接对接 DuplexKit 后端",
+      "behavior": "仓库以 submodule 引入金工小子 app，并在子仓库 full-stack 分支接入 DuplexKit /api/realtime：手机端采集麦克风持续推送 24kHz pcm_s16le，播放 24kHz pcm_f32le，下行文本更新现有 UI，五个工具请求映射到现有地图/导航状态并回传 tool_result，最终产出 Android debug APK。",
+      "status": "passing",
+      "verification": [
+        "./scripts/harness-check.sh",
+        "npm test",
+        "npm run build",
+        "cd apps/jingongxiaozi && npm install && npm run build",
+        "cd apps/jingongxiaozi/src-tauri && cargo check",
+        "cd apps/jingongxiaozi && npm run tauri -- android build --apk --debug -v",
+        "aapt dump permissions/badging apps/jingongxiaozi generated APK"
+      ],
+      "evidence": "2026-06-09: git submodule add https://github.com/zzw4257/jingongxiaozi.git apps/jingongxiaozi -> success，子仓库切到本地 full-stack 分支，baseline df6d205；审阅确认金工小子 app 是 Tauri 2 + React 18 + Vite 6 + TypeScript 5.7，已有 BackendDirective/MapDirectRequest 入口但无 realtime WebSocket/getUserMedia 客户端；新增 apps/jingongxiaozi/src/duplexkit bridge，接入 ws://<Mac IP>:<port>/api/realtime，上行 24kHz mono pcm_s16le，下行 24kHz mono pcm_f32le，transcript/assistant_text 更新现有 UI，五个 tool_request 映射到地图/导航状态并回传 tool_result；Android manifest 补 INTERNET/RECORD_AUDIO/MODIFY_AUDIO_SETTINGS，debug cleartext 保持可用；移除上游 android.aapt2FromMavenOverride 的 /Users/zzw4257 硬编码路径后 APK 构建成功。验证：root ./scripts/harness-check.sh -> pass, 0 warnings；root npm test -> 5 files / 26 tests passing；root npm run build -> pass；cd apps/jingongxiaozi && npm install -> success；npm run build -> pass；src-tauri cargo check -> pass；npm run tauri -- android build --apk --debug -v -> BUILD SUCCESSFUL；npm run tauri -- android build --apk --debug --target aarch64 -> BUILD SUCCESSFUL。APK path apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk；size 126M；sha256 0a474ea5f860728012e1e36efebe7942b0db2a6c0cc2d590a8b2539a20e5e53c；aapt badging: package cn.edu.zju.jingongxiaozi, label 金工小子, minSdk 24, targetSdk 36, compileSdk 36, native-code arm64-v8a；aapt permissions: INTERNET, MODIFY_AUDIO_SETTINGS, RECORD_AUDIO。审计文档 docs/integration/jingongxiaozi-full-stack-audit.md 已记录困难、取舍和审计入口。",
+      "notes": "不改后端主协议；不做 release 签名、真实地图服务或真机自动化麦克风授权。APK 已生成但仍需用户在手机上安装后完成同局域网手测。Tauri 构建会生成本机路径的 tauri.settings.gradle，提交前需决定是否保留或让 Tauri 在目标机器重新生成。"
+    },
+    {
+      "id": "F010",
+      "priority": "P0",
+      "area": "mobile-acceptance",
+      "title": "金工小子适配版 APK 真机端到端验收",
+      "behavior": "通过 USB/ADB 在 Android 真机上安装金工小子适配版 APK，启动 DuplexKit 后端，并使用后端命令行 debug fixture 向当前 app realtime session 注入预录音频，验证文本、音频和工具请求；麦克风作为后续人工路径。",
+      "status": "active",
+      "verification": [
+        "./scripts/harness-check.sh",
+        "npm run build",
+        "cd apps/jingongxiaozi && npm run build",
+        "cd apps/jingongxiaozi && JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home PATH=\"/Users/ely/.rustup/toolchains/stable-aarch64-apple-darwin/bin:/opt/homebrew/Cellar/rustup/1.29.0_1/bin:/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home/bin:$PATH\" npm run tauri -- android build --apk --debug --target aarch64",
+        "adb install --no-streaming -r -g -t apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk",
+        "adb reverse tcp:5177 tcp:5177",
+        "node dist/server.js",
+        "CDP-driven WebView test: connect DuplexKit and send open-map/navigate/smalltalk fixture audio"
+      ],
+      "evidence": "2026-06-13: adb devices -l -> 5EF0218201019278 device, HUAWEI BLA-AL00, Android 10 / SDK 29, ABI arm64-v8a；adb reverse tcp:5177 tcp:5177 有效。按用户要求，主验收路径使用 app 内置预录测试音频而非麦克风：open-map.wav、navigate-beijing-south.wav、smalltalk-no-tool.wav 放入 apps/jingongxiaozi/public/duplexkit-fixtures/，后端调试面板三个测试音频按钮发送 24kHz mono pcm_s16le 帧。自治测试先发现工具 UI 会被 assistant_text 覆盖回常态对话，已修复为工具请求后 12 秒内 assistant_text 只进调试 transcript、不覆盖地图/导航 UI。验证：npm run build -> pass；cd apps/jingongxiaozi && npm run build -> pass；Android debug APK 构建 -> pass；adb install --no-streaming -r -g -t -> Success；包 cn.edu.zju.jingongxiaozi lastUpdateTime=2026-06-13 10:33:56，INTERNET/MODIFY_AUDIO_SETTINGS/RECORD_AUDIO 均 granted。最终 APK path apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk，size 246M，sha256 a717e56d7d013d9d66eccd62b03e8db97b5cf7dff8cca9b9f7f9ec18455f12be。真机 WebView DevTools + adb reverse + node dist/server.js 验收：连接 ws://127.0.0.1:5177/api/realtime 成功；open-map fixture -> transcript “打开地图。”，tool_request map.open，tool_result “地图已打开”，app 保持地图导航页且地图 rail active，截图 logs/device-acceptance/2026-06-13-open-map-fixture-result.png；navigate fixture -> transcript “导航到北京南站。”，tool_request navigation.start，tool_result “导航已启动，目的地是108 108 门厅”，app 保持地图导航页并显示路线步骤；smalltalk fixture -> transcript “你好，今天我们随便聊两句。”，无工具，app 进入常态对话并显示 “好呀，想聊点什么？”，截图 logs/device-acceptance/2026-06-13-smalltalk-fixture-result.png。client_debug 日志 logs/client-debug/2026-06-13.jsonl 记录 socket_open 和三条 fixture_audio_start/end。导航后出现一次 Volcengine DialogAudioIdleTimeoutError，重连后 smalltalk 成功，判断为空闲会话上游关闭，不影响工具链路验收。 2026-06-13 UI follow-up: 用户反馈 app 内只看到“正在聆听”，连接/开麦/断开入口不明显。已将顶部主按钮改为状态机：未连接时显示“连接后端”，连接成功后显示“开始聆听”且增加“断开”按钮，开麦时显示“停止聆听”；header 状态改为“未连接 / 连接中 / 已连接，未开麦 / 开麦中 / 发送测试音频”，避免把 realtime session listening 误解为麦克风持续开着。验证：cd apps/jingongxiaozi && npm run build -> pass；Android debug APK build -> pass；adb install --no-streaming -> Success，lastUpdateTime=2026-06-13 11:12:24；WebView DevTools 验证顶部从“连接后端”点击后变为“已连接，未开麦 / 开始聆听 / 断开”，点击断开后回到“未连接”。 2026-06-13 correction: 用户指出正式 app 找不到后端连接入口、聆听状态无法明确停止，且测试音频不应作为正式 app 功能。已修正代码：正式 app 删除测试音频按钮和 public fixture；新增独立浮动控制条，地图/kiosk 模式也显示“连接后端 / 开始聆听 / 停止聆听 / 断开”，header 状态使用“未连接 / 已连接，未开麦 / 开麦中”；后端新增 POST /api/debug/realtime-fixture 和 npm run debug:realtime-fixture -- <fixture>，用于命令行向当前 app realtime 会话注入 tests/assets 录音。验证：npm run build -> pass；npm test -> 5 files / 26 tests passing；cd apps/jingongxiaozi && npm run build -> pass；Android debug APK build -> pass，APK sha256 d9f8359439aebd23808f549d301430b7ddf91bb845a7a5dc977ee9ef5a84fccf；npm run debug:realtime-fixture -- open-map 在无 app session 时返回 409 No active realtime app session。2026-06-13 reinstall: adb devices -l -> 5EF0218201019278 device；adb install --no-streaming -r -g -t apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk -> Success；包 cn.edu.zju.jingongxiaozi lastUpdateTime=2026-06-13 11:40:08，INTERNET/MODIFY_AUDIO_SETTINGS/RECORD_AUDIO 均 granted；WebView DOM 验证 .duplex-control-dock = 未连接 / 连接后端，buttons 包含 连接后端、聆听展示、地图、对话、专家，hasFixtureText=false。状态改为 active：最新版 UI 已真机安装并可见；WebView DevTools 自动连接 app 后，open-map / navigate-beijing-south / smalltalk-no-tool / cancel-no-running-tool 四条命令行 debug fixture 均 HTTP 200 并驱动 app 切换到预期地图、导航或对话 UI；截图 logs/device-acceptance/2026-06-13-debug-fixture-final.png。内部录音/fixture 测试已通过，下一步等待用户做真实手机声音采集测试。 2026-06-13 map-preserve follow-up: 用户真实语音测试确认后端核心 MVP 基本可用，但地图 3D 渲染失败且语音通知会切走地图。排查：真机 WebView fetch /map-models/jingong.glb 与 fallback .glb 返回 200 text/html Tauri shell，非 GLB；普通 realtime 事件被映射为全局 listening/processing/chat directive 导致 appState 离开 map。按用户确认的低风险方案修复外层适配：App.tsx 在 map mode 下忽略 wake/listening/processing/chat/expert 的切页效果；MapShell.tsx 在 Android+Tauri 默认 legacy 地图，保留手动 3D 入口。验证：cd apps/jingongxiaozi && npm run build -> pass；Android APK build 在限制 Gradle JVM/worker 后通过；新 APK sha256 aed5bd4f8b5daf222ce86fb73adb56a6d567b1842b58e71de41780f98deb929f；adb install -> Success；包 lastUpdateTime=2026-06-13 12:11:36；WebView DevTools 断言 direct map 后 isLegacy=true/hasLegacyMap=true/has3dMap=false，direct chat 不切走地图，open-map fixture 保持 legacy 地图，地图打开后 smalltalk-no-tool fixture 仍保持 legacy 地图，截图 logs/device-acceptance/2026-06-13-map-shell-preserve-after-smalltalk.png。",
+      "notes": "当前代码修正了正式 UI、后端命令行测试后门和地图打开后的普通语音切页问题；最新版 APK 已安装到真机；debug fixture 注入和地图保持验证已通过。3D 地图核心未修改，Android+Tauri 默认使用 legacy 地图，降低维护风险。每条 fixture 后的连接失败来自无持续音频输入导致上游 realtime idle close，真实麦克风测试时应连接后立刻开始聆听并说话。"
     }
   ]
 }

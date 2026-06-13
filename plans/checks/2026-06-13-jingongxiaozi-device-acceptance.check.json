@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "plan": "plans/active/2026-06-13-jingongxiaozi-device-acceptance.md",
+  "feature_id": "F010",
+  "anchors": [
+    {
+      "id": "adb-device-detected",
+      "severity": "warn",
+      "reason": "真机验收必须先建立 ADB 可操作状态。",
+      "check": "evidence_contains",
+      "feature_id": "F010",
+      "pattern": "adb devices.*device|BLA-AL00",
+      "suggest": "记录 adb devices -l 和设备型号输出。"
+    },
+    {
+      "id": "apk-installed",
+      "severity": "warn",
+      "reason": "用户要验收的是金工小子适配版 APK，而不是 web demo。",
+      "check": "evidence_contains",
+      "feature_id": "F010",
+      "pattern": "cn.edu.zju.jingongxiaozi|adb install",
+      "suggest": "记录 APK 安装结果和包名检查。"
+    },
+    {
+      "id": "backend-running",
+      "severity": "warn",
+      "reason": "手机端连接依赖本机后端可访问。",
+      "check": "evidence_contains",
+      "feature_id": "F010",
+      "pattern": "5177|npm run dev|server",
+      "suggest": "记录后端启动方式、PID、日志路径和本机 IP。"
+    }
+  ]
+}

@@ -10,71 +10,96 @@
 - 项目名：DuplexKit
 - 本地路径：`/Users/ely/workspace/research/audio/DuplexKit`
 - 分支：`main`
-- 远端：`origin https://github.com/ElysiaFollower/DuplexKit.git`
-- upstream：`origin/main`
-- 最近关键提交：本次收尾提交 `feat: finalize assistant tool protocol`
-- 当前计划：无 active plan；F007 已归档到 `plans/archive/2026-05-31-assistant-driven-tools.md`
-- 当前功能项：F001-F007 均 passing
-- 启动路径：`npm run dev` 或 `npm start`，打开 `http://localhost:5177`
-
-## 当前技术路线
-
-- 唯一语音主路线：`app realtime audio -> /api/realtime -> Volcengine realtime speech model -> app playback audio`
-- 应用端上行：24kHz mono `pcm_s16le` binary frame，无 WAV header。
-- 火山模型：realtime dialogue，resource id `volc.speech.dialog`。
-- 应用端下行播放：24kHz mono `pcm_f32le`。
-- 服务协议：`GET /api/tools` 返回 realtime protocol 与五个 app 工具 registry；`GET /api/realtime` 下行 `message_end`、`tool_request` 等 JSON 事件，应用端回传 `tool_result`。
-- 工具链路：`ChatEnded assistant response -> 固定工具声明解析 -> tool_request -> app tool_result 或后端 fallback -> 300 ChatTTSText 播报 tool_result`。
-- ASR transcript 只用于显示和日志，不直接触发工具。
-- app 需要实现的工具：`map.open`、`map.close`、`map.set_origin`、`map.set_destination`、`navigation.start`。
-- 内部控制工具：`control.kill`；不要求小程序实现地图动作。
-- 工具约束：工具串行；pending 期间只允许 `control.kill`，其他工具被拒绝并播报“上个工具调用尚未结束，请稍后。”。
-- 可观测性：`Dialogue` 记录干净对话；`Session flow` 记录结构化调试事件；`Save log` 写 `logs/session/*.json`。
-- 已删除并禁止恢复为主路线：ASR -> LLM -> TTS 级联实现、旧 `/api/turn`、旧 `/api/text-turn`。
+- 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
+- 当前功能项：F010 `active`
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题，下一步等待用户对新 APK 再做真实声音采集体验确认。
 
 ## 当前已验证状态
 
-- 2026-05-31 已运行并通过：`./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`node --check scripts/raw-realtime-demo.mjs`。
-- `npm test` 当前 5 files / 25 tests passing。
-- `npm run test:realtime-fixtures` 当前 4 scenarios passing：open-map、navigate-beijing-south、smalltalk-no-tool、cancel-no-running-tool。
-- session log API 已通过自动测试：`POST /api/session-logs` 写入 JSON，测试读取文件验证 `schemaVersion`、`dialogue`、`flow`。
-- 手动/用户验证：原生 realtime 可用；工具调用 demo 可听；修复后工具注入语音会同步进入 `Dialogue`；用户验证 `300 ChatTTSText` 可进入后续语音模型上下文，`502 ChatRAGText` 当前无效。
-- 旧电噪声问题已定位并修复：下行音频必须按 `pcm_f32le` 播放。
+- 旧一轮真机验证曾证明后端到金工小子 app 的 realtime 链路可用：聊天、打开地图、开始导航均成功。
+- 本轮纠偏已完成代码层修复：
+  - 正式 app 删除测试音频按钮和 `public/duplexkit-fixtures`。
+  - app 新增独立浮动控制条，地图/kiosk 模式也可见。
+  - 状态文案明确为 `未连接 / 已连接，未开麦 / 开麦中`。
+  - 主按钮明确为 `连接后端 / 开始聆听 / 停止聆听`，连接后出现 `断开`。
+  - 后端新增命令行测试后门：`POST /api/debug/realtime-fixture` 和 `npm run debug:realtime-fixture -- <fixture>`。
+- 已通过验证：
+  - `npm run build`
+  - `npm test`，5 files / 26 tests passing
+  - `cd apps/jingongxiaozi && npm run build`
+  - Android debug APK 构建
+  - `npm run debug:realtime-fixture -- open-map` 在无 app session 时返回 409 `No active realtime app session`
+- 当前已安装 APK：
+  - 路径：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`
+  - sha256：`d9f8359439aebd23808f549d301430b7ddf91bb845a7a5dc977ee9ef5a84fccf`
+  - 大小：246M
+- 真机安装确认：
+  - `adb install --no-streaming -r -g -t .../app-universal-debug.apk` -> `Success`
+  - 包 `cn.edu.zju.jingongxiaozi` `lastUpdateTime=2026-06-13 11:40:08`
+  - `INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO` 均为 `granted=true`
+  - WebView DOM：`.duplex-control-dock` 为 `未连接\n连接后端`，按钮包含 `连接后端`、`聆听展示`、`地图`、`对话`、`专家`，不包含 `测试音频`
+- 命令行 debug fixture 真机复验：
+  - `open-map` -> HTTP 200，app 进入地图页，显示地图楼层/图层控件
+  - `navigate-beijing-south` -> HTTP 200，app 保持地图导航页，显示当前位置、终点和路线步骤
+  - `smalltalk-no-tool` -> HTTP 200，app 进入常态对话，显示后端实时回复
+  - `cancel-no-running-tool` -> HTTP 200，app 进入常态对话，显示“当前没有正在执行的工具调用。”
+  - 截图：`logs/device-acceptance/2026-06-13-debug-fixture-final.png`
+  - 观察：每条 fixture 后控制条会变成 `连接失败 / 重新连接`，因为没有持续麦克风输入，上游 realtime session 会在静默后关闭；测试脚本逐条重连后继续注入。真实麦克风测试时应连接后立刻点击 `开始聆听` 并说话。
+- 地图保持修复：
+  - 用户真实语音测试发现：地图打开后，新的语音通知会把页面切回金工小子对话/聆听界面。
+  - 根因：接入层把普通 realtime 事件映射为全局 `listening/processing/chat` directive，触发金工小子 app state 切页。
+  - 修复：`App.tsx` 在当前 mode 为 `map` 时忽略 `wake/listening/processing/chat/expert` 的切页效果；只有地图工具或显式 `map.close` 改变地图页面。
+  - 3D 地图失败根因：真机 WebView 对 `/map-models/jingong.glb` 和 fallback `.glb` 返回 `text/html` Tauri shell，不是 GLB；未修改 3D 核心，`MapShell.tsx` 在 Android+Tauri 默认使用 legacy 地图。
+  - 新 APK sha256：`aed5bd4f8b5daf222ce86fb73adb56a6d567b1842b58e71de41780f98deb929f`，包 `lastUpdateTime=2026-06-13 12:11:36`。
+  - 真机 WebView 验证：Android 默认 `isLegacy=true`、`hasLegacyMap=true`、`has3dMap=false`；地图打开后直接 chat directive 不切走；`open-map` fixture 保持 legacy 地图；地图打开后 `smalltalk-no-tool` fixture 仍保持 legacy 地图。
+  - 截图：`logs/device-acceptance/2026-06-13-map-shell-preserve-after-smalltalk.png`
 
 ## 仍损坏或未验证
 
-- 真实地图/导航服务由“金工小子” app 执行；本仓库已提供 `docs/integration/frontend-protocol.md`、`tool_request` / `tool_result` 协议和 demo auto-ack fallback，但尚未和真实 app 联调。
-- Planner 当前是规则版固定句式解析，不是 LLM Planner；不能处理非白名单 assistant 工具声明。
-- 火山 `502 ChatRAGText` 作为工具结果注入路线验证无效；当前默认使用 `300 ChatTTSText`。
-- 长回复中用户打断后，火山服务端是否完全停止旧 `reply_id` 仍需专项手测；当前前端会在 `ASRInfo` 立刻清掉本地排队播放。
-- 自动化无法替用户授权麦克风；真实说话、插话、噪声误触发仍需浏览器手测并保存 session log。
-- pending 中 kill 的浏览器时序压测未纳入 F007 完成定义；如要验证取消时序，后续另开专项。
+- 新的浮动控制条已真机复验；用户若仍看到“正在聆听”，大概率是旧界面残留/未刷新，需要重启 app 或确认包更新时间。
+- 麦克风真实连续语音仍未验证；需要用户拿手机说话完成人工路径。
+- 地图保持修复后的真实声音体验仍待用户确认。
+- fixture 跑完后的 `连接失败 / 重新连接` 是无持续音频输入时的上游 idle close 表现，后续可优化为更温和的 `未连接` 文案，但不阻塞真实语音测试。
 
 ## 清洁状态
 
-- 构建/静态检查：`npm run typecheck`、`npm run build` 通过。
-- 测试/端到端：2026-06-07 `./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`npm run test:realtime-fixtures` 通过；浏览器手动 pending 拒绝和 pending 中 kill 取消仍待用户验证。
-- 进度状态：`harness/feature_list.json` 已同步 F007 passing；`harness/progress.md` 已记录协议固化和归档；当前无 active plan。
-- 临时工件：`logs/session/*.json` 被 `.gitignore` 排除；仓库只保留 `logs/session/.gitkeep`。本次收尾不应留下测试 JSON。
-- 启动路径：`./init.sh` 和 `./scripts/harness-check.sh` 应可在新路径继续运行；改名后如路径相关脚本失败，先检查当前 cwd 和 `.env`。
+- 后端测试进程已停止，5177 无监听。
+- `logs/device-acceptance/`、`logs/client-debug/` 为本地证据目录并已 gitignore。
+- 当前工作树包含本轮修复和此前未提交的 F008/F009/F010 相关改动；不要回滚用户或既有改动。
 
 ## 下一步最佳动作
 
-1. 把 [frontend-protocol.md](../docs/integration/frontend-protocol.md) 给小程序开发者，联调 WebSocket 音频、`message_end`、五个 app 工具和 `tool_result`。
-2. 小程序端完成基础接入后，用 `npm run test:realtime-fixtures` 和真实小程序各跑一遍打开地图/导航/闲聊 no-op。
-3. 如要验证 pending 中 kill 时序，新增 active plan，不要混入已归档 F007。
+1. 启动后端和 app：
+
+```sh
+node dist/server.js
+adb reverse tcp:5177 tcp:5177
+adb shell am start -n cn.edu.zju.jingongxiaozi/.MainActivity
+```
+
+2. 真实声音采集测试：
+   - 在 app 浮动控制条点 `连接后端`。
+   - 状态变成 `已连接，未开麦` 后立刻点 `开始聆听`。
+   - 用户对手机说“打开地图”“导航到北京南站”“随便聊两句”等。
+   - 验收：app 能收到文本/音频回复，并按工具请求切到地图或导航。
 
 ## 命令
 
-- 安装/初始化：`./init.sh`
-- 开发启动：`npm run dev`
-- 生产启动：`npm run build && npm start`
-- 类型检查：`npm run typecheck`
-- 测试：`npm test`
-- 生成音频 fixture：`npm run fixtures:audio`
-- 真实 fixture 回归：`npm run test:realtime-fixtures`
-- 构建：`npm run build`
-- 本地 smoke：`npm run smoke:local`
-- 真实直连 smoke：`npm run smoke:realtime`
-- 本地桥接 smoke：`npm run smoke:bridge`
+- 初始化：`./init.sh`
 - Harness 检查：`./scripts/harness-check.sh`
+- 后端构建：`npm run build`
+- 后端测试：`npm test`
+- 后端启动：`node dist/server.js`
+- Debug sessions：`curl http://127.0.0.1:5177/api/debug/realtime-sessions`
+- Debug fixture：`npm run debug:realtime-fixture -- open-map`
+- ADB reverse：`adb reverse tcp:5177 tcp:5177`
+- APK 安装：`adb install --no-streaming -r -g -t apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`
+- 金工小子 Web 构建：`cd apps/jingongxiaozi && npm run build`
+- 金工小子 APK 构建：
+
+```sh
+cd apps/jingongxiaozi
+JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home \
+PATH="/Users/ely/.rustup/toolchains/stable-aarch64-apple-darwin/bin:/opt/homebrew/Cellar/rustup/1.29.0_1/bin:/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home/bin:$PATH" \
+npm run tauri -- android build --apk --debug --target aarch64
+```

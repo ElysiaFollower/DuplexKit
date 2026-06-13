@@ -7,10 +7,10 @@
 
 ## 当前状态
 
-- 当前功能项：F001-F007 均 passing；当前无 active 功能项
-- 当前任务计划：无 active plan；F007 已归档到 `plans/archive/2026-05-31-assistant-driven-tools.md`
-- 上次验证：2026-06-07 `./init.sh`、`./scripts/harness-check.sh`、`npm run typecheck`、`npm test`、`npm run build`、`npm run smoke:local`、`npm run test:realtime-fixtures` 均通过；用户验证 `300 ChatTTSText` 可进入后续语音模型上下文，`502 ChatRAGText` 当前无效
-- 下一步最佳动作：给小程序开发者按 `docs/integration/frontend-protocol.md` 联调 `/api/realtime`、`/api/tools`、五个 app 工具和 `message_end` 文本边界；如要压测 pending 中 kill 时序，另开新任务
+- 当前功能项：F001-F008 均 passing；当前无 active 功能项
+- 当前任务计划：无 active plan；F008 已归档到 `plans/archive/2026-06-07-mobile-demo.md`
+- 上次验证：2026-06-07 `./scripts/harness-check.sh`、`npm test`、`npm run build`、`cd mobile-demo && npm install && npm run typecheck && npm run build`、`cd mobile-demo && npx tauri info`、Playwright 首屏检查均完成；`npx tauri info` 显示 Tauri 配置可识别但本机未安装 Rust/Cargo，因此未做原生手机打包验证
+- 下一步最佳动作：用户在 Mac 上启动后端和 mobile-demo dev server，用手机同局域网访问 demo 或交给手机侧开发者迁移；真机输入 Mac IP `10.196.242.175` 和端口 `5177` 后验证麦克风、播放、文本边界和五个工具
 
 ## 状态约定
 
@@ -109,3 +109,177 @@
 - 已固化小程序对接协议：`GET /api/realtime` 长连接 WebSocket；`GET /api/tools` 返回 realtime protocol metadata；后端下发 `message_end` 作为文本/播放边界；对前端 app 暴露五个地图/导航工具，`control.kill` 为内部控制工具。
 - 2026-06-07 协议固化验证：`npm test` 5 files / 25 tests passing；`npm run test:realtime-fixtures` 四条真实 fixture 通过；`npm run smoke:local` 通过。
 - F007 已标记 passing 并归档：`plans/archive/2026-05-31-assistant-driven-tools.md`。浏览器 pending 中 kill 时序压测未纳入本任务完成定义，后续如需要单独开专项。
+
+### 2026-06-07 - F008 移动端后端效果验证 demo 启动
+
+- 用户希望在仓库子目录快速做一个手机可展示的 Tauri + React demo，用于和手机侧开发者对齐后端服务能力。
+- 已确认当前形态是长期 WebSocket 会话中持续发送音频 chunk，不是录一段再发一段：`docs/overview.md`、`docs/architecture/runtime.md`、`docs/integration/frontend-protocol.md` 和 `src/protocol.ts` 均要求连接期间持续发送 24kHz mono `pcm_s16le` raw PCM。
+- Active plan：`plans/active/2026-06-07-mobile-demo.md`。
+- 目标范围：新增 `mobile-demo/`，首屏输入 Mac IP + port、连接、一个语音按钮、文本流、极简正方形工具区；五个工具由后端 `tool_request` 驱动并回传 `tool_result`。
+- 非目标：不做真实地图/导航 SDK、不做生产级 app、不改后端协议、不要求本次自动安装到 USB 手机。
+
+### 2026-06-07 - F008 移动端后端效果验证 demo 完成
+
+- 新增 `mobile-demo/` Tauri + React 最小客户端。
+- 首屏包含 Mac IP、port、连接按钮、一个语音按钮、文本区和正方形地图工具区。
+- 连接逻辑直接使用 `ws://<mac-ip>:<port>/api/realtime`，避免 Tauri/WebView origin 下 `/api/health` 或 `/api/tools` HTTP CORS 预检阻塞；后端协议和工具名不变。
+- 语音按钮开启/停止连续麦克风推流：Web Audio `getUserMedia` -> 24kHz mono `pcm_s16le` raw PCM chunk -> WebSocket binary frame。
+- 下行音频按 24kHz mono `pcm_f32le` 播放；`asr_start` 时清空旧播放队列。
+- 文本 UI 处理 `transcript`、`assistant_text`、`message_end`、`asr_end`、`llm_end`/`tts_end`。
+- 工具 UI 处理 `map.open`、`map.close`、`map.set_origin`、`map.set_destination`、`navigation.start`，更新正方形可见状态、角点、导航高亮，并回传 `tool_result`。
+- 验证：`cd mobile-demo && npm install` 成功，0 vulnerabilities；`npm run typecheck` 通过；`npm run build` 通过；`npx tauri info` 可识别 Tauri 配置但本机缺 Rust/Cargo；根仓库 `./scripts/harness-check.sh`、`npm test`、`npm run build` 通过；Playwright 首屏检查通过。
+- 计划已归档：`plans/archive/2026-06-07-mobile-demo.md`。
+
+### 2026-06-07 - F008 mobile debug follow-up
+
+- 用户手机浏览器测试语音按钮时出现 `getUserMedia not found`；判断大概率是通过 `http://10.x.x.x:1420` 访问 mobile demo 时，移动浏览器因非 secure context 不暴露 `navigator.mediaDevices.getUserMedia`。
+- 新增 `client_debug` 客户端 WebSocket 消息：后端只打印 `[client_debug] ...` 到控制台，不转发给火山 realtime，不触发工具。
+- `mobile-demo` 新增 `npm run dev:debug` 和 `?debug=1`：显示手机端 debug banner/log panel，记录 secure context、mediaDevices、getUserMedia、WebSocket、麦克风和未捕获错误，并在 WebSocket 已连接时回传后端。
+- 后续补强：`client_debug` 现在也会追加写入 `logs/client-debug/YYYY-MM-DD.jsonl`；当前已运行的旧后端进程需重启后才具备该落盘能力。
+- 更新 `docs/integration/frontend-protocol.md` 和 `mobile-demo/README.md` 说明 debug 消息和麦克风 secure-context 限制。
+- 验证：root `npm test` 5 files / 26 tests passing；root `npm run build` 通过；`./scripts/harness-check.sh` 通过；`cd mobile-demo && npm run typecheck` 通过；`cd mobile-demo && npm run build` 通过；Playwright 打开 `http://127.0.0.1:1420/?debug=1` 可见 debug banner/log panel。
+
+### 2026-06-07 - F008 Android APK follow-up
+
+- 将 `mobile-demo/` 从 WebView 开发预览推进到可安装 Android APK：安装 Rust/Android toolchain，初始化 Tauri Android 工程。
+- 初始 Android manifest 增加 `RECORD_AUDIO`，保留 `INTERNET`；初始 debug/default manifest 允许 LAN `ws://10.x.x.x` cleartext 连接，后续已按金工小子仓库校准为 default/release cleartext=false、debug=true。
+- 修复打包前质量问题：补 Tauri icon、移除未使用的 opener plugin、修复 WebSocket JSON 解析错误会导致崩溃的路径、用静音 gain node 避免 mic ScriptProcessor 自监听。
+- 初始产物：`mobile-demo/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，debug universal APK，418M，sha256 `63e6573190944e537506b4b814d2577e3778d1de9e1a668e4ff14ff6c37c1289`；当前产物见后续 jingongxiaozi calibration 记录。
+- 初始 APK 权限审计：`aapt dump permissions` 确认 package `dev.duplexkit.mobile.demo` 包含 `android.permission.INTERNET` 和 `android.permission.RECORD_AUDIO`；当前权限已补 `MODIFY_AUDIO_SETTINGS`。
+- 验证：`cd mobile-demo && npm run typecheck` 通过；`cd mobile-demo && npm run build` 通过；`cd mobile-demo/src-tauri && cargo check` 通过；`cd mobile-demo && npm run tauri -- android build --apk --debug -v` 通过；根 `./scripts/harness-check.sh`、`npm test`、`npm run build` 均通过。
+
+### 2026-06-07 - F008 jingongxiaozi app calibration
+
+- 按用户要求拉取 public 仓库 `https://github.com/zzw4257/jingongxiaozi.git` 到 `/tmp/jingongxiaozi` 并审阅源码；fetch 结果 success，无网络阻塞。
+- 对方 app 当前技术栈：Tauri 2 + React 18 + Vite 6 + TypeScript 5.7 + Three.js；Android 工程已生成，主 Activity 横屏和 kiosk fullscreen；manifest 只有 `INTERNET`，debug build `usesCleartextTraffic=true`，default/release `false`。
+- 对方 app 目前是 `BackendDirective` / `MapDirectRequest` 的后端指令模拟结构，未发现真实 `WebSocket`、`getUserMedia`、`AudioContext` 实时语音客户端；迁移重点应是把 DuplexKit realtime client 接到现有 directive/state model。
+- 校准 `mobile-demo`：依赖版本降到 React 18 / Vite 6 / TypeScript 5.7，Tauri JS/CLI 对齐到 2.11.x；Android compile/target SDK 改 36；default cleartext 改 `false`，debug cleartext 保持 `true`；补 `MODIFY_AUDIO_SETTINGS`，因为 Tauri/Wry `RustWebChromeClient.onPermissionRequest` 会和 `RECORD_AUDIO` 一起请求它来授权 WebView audio capture。
+- 重建 APK：`mobile-demo/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，418M，sha256 `22c057118f2691824f1df3bbff6cf51878273e4f75acc3b49937b222f836853d`。
+- APK 审计：`aapt dump permissions` 确认 `INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO`；`aapt dump badging` 确认 `compileSdkVersion=36`、`targetSdkVersion=36`、`minSdk=24`。
+- 验证：`mobile-demo npm install` 0 vulnerabilities；`mobile-demo npm run typecheck` 通过；`mobile-demo npm run build` 通过；`mobile-demo/src-tauri cargo check` 通过；`mobile-demo npm run tauri -- android build --apk --debug -v` 成功；根 `./scripts/harness-check.sh`、`npm test`、`npm run build` 通过。
+
+### 2026-06-09 - F009 金工小子 app 直接对接启动
+
+- 用户决定不再以 `mobile-demo` 作为主要验证对象，改为把 public 金工小子 app 仓库作为 submodule 引入并直接适配 DuplexKit 后端。
+- Active plan：`plans/active/2026-06-09-jingongxiaozi-full-stack.md`。
+- 目标：`apps/jingongxiaozi` 子仓库本地 `full-stack` 分支接入 `/api/realtime`，完成语音上行、音频下行、文本展示、五个工具请求映射和 Android debug APK 构建。
+- 非目标：不改 DuplexKit 后端主协议、不做真实地图服务、不做 release 签名包、不回滚已有 `mobile-demo` / debug logging 未提交改动。
+- 下一步：添加 submodule、研究金工小子已有 `BackendDirective` / `MapDirectRequest` 接口和 DuplexKit 协议差异。
+
+### 2026-06-09 - F009 金工小子 app 直接对接完成
+
+- 新增 `.gitmodules` 和 `apps/jingongxiaozi` submodule；子仓库来自 `https://github.com/zzw4257/jingongxiaozi.git`，本地分支为 `full-stack`，baseline `df6d205`。
+- 在金工小子 app 内新增 `src/duplexkit/` bridge：连接 `ws://<Mac IP>:<port>/api/realtime`，采集麦克风并持续发送 24kHz mono `pcm_s16le`，播放后端 24kHz mono `pcm_f32le` 下行音频。
+- 将 `transcript`、`assistant_text`、`message_end`、`asr_start` 等事件映射到现有展示状态；将 `map.open`、`map.close`、`map.set_origin`、`map.set_destination`、`navigation.start` 映射到已有 `BackendDirective` / `MapDirectRequest`，并回传 `tool_result`。
+- Android manifest 补 `RECORD_AUDIO` 和 `MODIFY_AUDIO_SETTINGS`；debug build 沿用 cleartext 以支持局域网 `ws://10.x`。
+- 修复上游构建环境绑定：移除 `android.aapt2FromMavenOverride=/Users/zzw4257/.../aapt2`，改回 Android Gradle Plugin 自行解析 AAPT2。
+- 困难审计写入 `docs/integration/jingongxiaozi-full-stack-audit.md`。
+- 验证：根 `./scripts/harness-check.sh` 通过，0 warnings；根 `npm test` 5 files / 26 tests passing；根 `npm run build` 通过；`apps/jingongxiaozi npm install` 成功；`npm run build` 通过；`src-tauri cargo check` 通过；`npm run tauri -- android build --apk --debug -v` 成功；`npm run tauri -- android build --apk --debug --target aarch64` 成功。
+- APK：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，126M，sha256 `0a474ea5f860728012e1e36efebe7942b0db2a6c0cc2d590a8b2539a20e5e53c`。
+- APK 审计：package `cn.edu.zju.jingongxiaozi`，label `金工小子`，minSdk 24，targetSdk 36，compileSdk 36，native-code `arm64-v8a`；权限包含 `INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO`。
+- F009 已标记 passing；真机安装、麦克风授权和同局域网端到端语音仍需用户手测。
+
+### 2026-06-13 - F010 金工小子真机验收启动
+
+- 用户已通过数据线连接手机并开启开发者模式，要求 agent 在用户离开期间完成可自动化的真机验收前置工作并记录过程。
+- ADB 已识别设备：`5EF0218201019278 device`，型号 `HUAWEI BLA-AL00`，Android 10 / SDK 29，ABI `arm64-v8a,armeabi-v7a,armeabi`。
+- 当前 Mac 局域网 IP：`10.162.230.154`。
+- Active plan：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`。
+- 目标：安装 `apps/jingongxiaozi/.../app-universal-debug.apk`，授予麦克风权限，启动 DuplexKit 后端，留下用户回饭后可直接人工验收的状态。
+
+### 2026-06-13 - F010 真机验收前置完成但安装受阻
+
+- 用户补充说明：本次功能测试不需要依赖麦克风权限，主路径应使用已录制音频或 TTS 生成音频发送给后端。
+- 已把金工小子适配改为支持内置测试音频：`open-map.wav`、`navigate-beijing-south.wav`、`smalltalk-no-tool.wav` 放入 `apps/jingongxiaozi/public/duplexkit-fixtures/`；后端调试面板新增三个“测试音频”按钮，读取 WAV data chunk 后按 100ms 发送 24kHz mono `pcm_s16le` binary frame。
+- 已验证旧 APK 可安装和启动：包名 `cn.edu.zju.jingongxiaozi`，手机可进入金工小子界面；截图保存在 `logs/device-acceptance/2026-06-13-jingongxiaozi-screen.png`。
+- 已验证网络前置条件：手机能 ping 通 Mac IP `10.162.230.154`；`adb reverse tcp:5177 tcp:5177` 已设置，方便 app 用 `127.0.0.1:5177` 访问 Mac 后端。
+- 已完成新代码构建：`cd apps/jingongxiaozi && npm run build` 通过；`npm run tauri -- android build --apk --debug --target aarch64` 通过。
+- 新 APK：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，大小 246M，sha256 `500e45e3f4f241f584f2cc0f36a0555ba102c26c82a037f0e231222f0896b329`。
+- DuplexKit 后端已用前台 PTY 执行 `node dist/server.js` 验证可持续运行，PID `20165`，监听 `0.0.0.0:5177`；`curl http://127.0.0.1:5177/api/health` 返回 `status=ok` 且 realtime configured=true。后台 `nohup node dist/server.js` 在当前 agent 执行环境中出现无错误退出，用户验收时应在独立终端保持 `node dist/server.js` 或 `npm run dev` 运行。
+- 阻塞点：重新安装新 APK 时 Huawei AppMarket 拦截未知来源安装，最终提示“需先登录才可以安装”。证据 XML/截图位于 `logs/device-acceptance/2026-06-13-install-window-5.xml`、`logs/device-acceptance/current-window.xml` 等。已取消卡住的 `adb install` 进程，手机回到 launcher。
+- F010 标记为 `blocked`，因为新 APK 尚未安装到手机，不能声称真机端到端验收完成。用户回来后需要在手机上登录/解除 Huawei 安装保护，再重新执行安装并点击测试音频按钮验收。
+
+### 2026-06-13 - F010 新 APK 已安装
+
+- 用户登录 Huawei 安装器后，重新执行 `adb install --no-streaming -r -g -t apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk` 成功，返回 `Success`。
+- 包信息确认：`cn.edu.zju.jingongxiaozi`，`lastUpdateTime=2026-06-13 10:23:23`，`INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO` 均为 granted。
+- `adb reverse tcp:5177 tcp:5177` 已设置；安装后前台 activity 为 `cn.edu.zju.jingongxiaozi/.MainActivity`。
+- 截图证据：`logs/device-acceptance/2026-06-13-new-apk-installed.png`。
+- F010 从 `blocked` 改回 `active`；下一步是启动 DuplexKit 后端，在 app 的后端调试面板连接 `127.0.0.1:5177`，点击预录测试音频按钮完成端到端验收。
+
+### 2026-06-13 - F010 真机预录音频端到端验收完成
+
+- 启动 `node dist/server.js`，通过 `adb reverse tcp:5177 tcp:5177` 让手机 WebView 连接 `ws://127.0.0.1:5177/api/realtime`。
+- 通过 WebView DevTools 自动操作金工小子 app：切到桌面布局，打开后端调试面板，连接 DuplexKit，点击预录测试音频按钮。
+- 第一轮 `open-map` 暴露适配 bug：`map.open` 工具执行成功后，后续 `assistant_text` 会映射成 `chat` directive，把地图页覆盖回常态对话。
+- 已修复：`apps/jingongxiaozi/src/duplexkit/useDuplexKitRealtime.ts` 在工具请求后 12 秒内保留工具 UI，assistant 播报文本只写入调试 transcript，不覆盖地图/导航/关闭地图状态；普通闲聊仍进入常态对话。
+- 修复后重新构建并安装 APK：最终 APK sha256 `a717e56d7d013d9d66eccd62b03e8db97b5cf7dff8cca9b9f7f9ec18455f12be`，大小 246M；手机包 `lastUpdateTime=2026-06-13 10:33:56`。
+- 最终真机验收：
+  - `测试音频：打开地图` -> transcript “打开地图。”，后端工具声明 `map.open`，app 回传 tool_result，最终保持 `地图导航`，地图 rail active。
+  - `测试音频：开始导航` -> transcript “导航到北京南站。”，后端工具声明 `navigation.start`，app 回传 tool_result，最终保持 `地图导航` 并显示路线步骤。
+  - `测试音频：普通对话` -> transcript “你好，今天我们随便聊两句。”，不触发工具，最终进入 `常态对话` 并显示“好呀，想聊点什么？”。
+
+### 2026-06-13 - F010 正式 UI 修正版安装确认
+
+- 用户反馈正式 app 找不到后端连接入口、无法明确停止聆听，且测试音频按钮不应出现在正式 UI。
+- 已修正正式 UI：新增独立浮动控制条，显示 `连接后端 / 开始聆听 / 停止聆听 / 断开`；删除 app 内测试音频按钮；后端改用命令行 debug fixture 注入测试音频。
+- 重新安装 APK 成功：`adb install --no-streaming -r -g -t apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk` -> `Success`。
+- 包确认：`cn.edu.zju.jingongxiaozi`，`lastUpdateTime=2026-06-13 11:40:08`，`INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO` 均 granted。
+- WebView DOM 确认：`.duplex-control-dock` 文案为 `未连接 / 连接后端`，按钮包含 `连接后端`、`聆听展示`、`地图`、`对话`、`专家`，不包含 `测试音频`。
+- F010 状态改为 `active`：新版 UI 已真机安装并确认可见；命令行 debug fixture 注入仍需在该版上继续复验后才能标记 passing。
+- 证据：`logs/client-debug/2026-06-13.jsonl` 有 socket_open 和三条 fixture_audio_start/end；截图 `logs/device-acceptance/2026-06-13-open-map-fixture-result.png`、`logs/device-acceptance/2026-06-13-smalltalk-fixture-result.png`。
+- 观察到一次火山 `DialogAudioIdleTimeoutError`，发生在导航测试后的空闲期；重连后普通对话成功，判断为空闲会话上游关闭，不影响本次工具链路验收。
+- F010 标记为 `passing`。麦克风仍是可选人工路径，不作为本次验收前置。
+
+### 2026-06-13 - F010 聆听开关 UI 可见性修复
+
+- 用户反馈 app 里只看到“正在聆听”，没有看到 `连接 DuplexKit` 按钮，也无法判断是否正在开麦。
+- 根因：原连接按钮藏在后端调试面板；顶部“实时语音”按钮在未连接时禁用；header 裸显示 realtime `listening`，容易被误解为麦克风持续开启。
+- 已改为顶部主控状态机：未连接显示 `连接后端`；连接成功显示 `已连接，未开麦`、按钮 `开始聆听` 和独立 `断开`；开麦后显示 `停止聆听`；测试音频期间显示 `发送测试音频：...`。
+- 验证：`cd apps/jingongxiaozi && npm run build` 通过；Android debug APK 构建通过；`adb install --no-streaming ...` 成功，包 `lastUpdateTime=2026-06-13 11:12:24`；WebView DevTools 验证点击 `连接后端` 后变为 `已连接，未开麦 / 开始聆听 / 断开`，点击 `断开` 后回到 `未连接`。
+
+### 2026-06-13 - F010 正式 UI 与后端测试后门纠偏
+
+- 用户指出：测试音频不应作为 app 正式功能；它应该是命令行/后端后门，用于模拟语音输入和验证界面切换。
+- 已从金工小子 app 删除测试音频按钮和 `public/duplexkit-fixtures`，正式 app 只保留后端连接、麦克风开始/停止、断开、文本/音频/工具 UI。
+- 已新增后端测试后门：
+  - `GET /api/debug/realtime-sessions` 查看当前 app realtime 会话。
+  - `POST /api/debug/realtime-fixture` 向当前 app realtime 会话注入 `tests/assets/*.wav` 的 PCM，按 100ms 节奏模拟真实麦克风输入。
+  - `npm run debug:realtime-fixture -- open-map` 作为命令行入口。
+- 已修正 app 连接入口：独立浮动控制条不依赖 header，地图/kiosk 模式也可见；状态为 `未连接 / 已连接，未开麦 / 开麦中`，按钮为 `连接后端 / 开始聆听 / 停止聆听 / 断开`。
+- 验证：`npm run build` 通过；`npm test` 5 files / 26 tests passing；`cd apps/jingongxiaozi && npm run build` 通过；Android debug APK 构建通过。
+- 新 APK：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，sha256 `d9f8359439aebd23808f549d301430b7ddf91bb845a7a5dc977ee9ef5a84fccf`。
+- 后端 debug endpoint 验证：无 app session 时 `npm run debug:realtime-fixture -- open-map` 返回 `{"ok":false,"error":"No active realtime app session"}`，HTTP 409。
+- 阻塞：安装新 APK 时 `adb` 报 `no devices/emulators found`；当前 `adb devices -l` 为空。最新版 APK 尚未安装和真机复验，F010 改为 `blocked` 等待手机重新连接。
+
+### 2026-06-13 - F010 正式 UI 修正版真机 debug fixture 通过
+
+- 重新安装当前 APK 成功：`adb install --no-streaming -r -g -t apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk` -> `Success`。
+- 包确认：`cn.edu.zju.jingongxiaozi`，`lastUpdateTime=2026-06-13 11:40:08`，`INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO` 均 granted。
+- WebView DOM 确认正式 UI：`.duplex-control-dock` 为 `未连接 / 连接后端`，按钮包含 `连接后端`、`聆听展示`、`地图`、`对话`、`专家`，不包含 `测试音频`。
+- 通过 WebView DevTools 自动点击 app 浮动控制条连接后端，并用后端命令行 debug fixture 注入预录音频到当前 app realtime session：
+  - `open-map` -> HTTP 200，app 进入地图页，显示地图楼层/图层控件。
+  - `navigate-beijing-south` -> HTTP 200，app 保持地图导航页，显示当前位置、终点和路线步骤。
+  - `smalltalk-no-tool` -> HTTP 200，app 进入常态对话，显示后端实时回复。
+  - `cancel-no-running-tool` -> HTTP 200，app 进入常态对话，显示“当前没有正在执行的工具调用。”。
+- 截图证据：`logs/device-acceptance/2026-06-13-reinstalled-floating-control.png`、`logs/device-acceptance/2026-06-13-debug-fixture-final.png`。
+- 观察：每条 fixture 跑完后控制条显示 `连接失败 / 重新连接`，因为没有持续麦克风输入，上游 realtime session 在静默后关闭；测试脚本逐条重连后继续注入。真实麦克风测试时应在连接后立刻点 `开始聆听` 并说话。
+- F010 保持 `active`：内部录音/fixture 测试已通过，下一步等待用户做真实手机声音采集测试。
+
+### 2026-06-13 - F010 地图保持和 Android legacy 地图外层修复
+
+- 用户真实语音测试确认：后端核心能力基本对齐，全双工语音输入和工具调用可用；剩余问题主要在 mobile app 前端体验。
+- 排查结论：
+  - 地图 3D 渲染失败不是后端问题。真机 WebView `fetch('/map-models/jingong.glb')` 和 `fetch('/map-models/jingong-fallback.glb')` 都返回 `200 text/html`，内容是 Tauri HTML shell，不是 GLB 文件；PNG/JS 资源正常。
+  - 语音通知关地图来自接入层把 `asr_start`、`transcript`、`asr_end`、`assistant_text` 映射为全局 `listening/processing/chat` directive，触发金工小子现有 app state 切页。
+- 用户确认方案：不插手大佬的 3D 地图核心代码，只在外层适配。已实施：
+  - `App.tsx`：当当前页面是 `map` 时，`wake/listening/processing/chat/expert` 这类普通语音状态不再切走地图；只有地图工具指令或显式关闭地图改变页面。
+  - `MapShell.tsx`：Android + Tauri 环境默认进入已有 legacy 地图，保留手动切回 `3D 精确模型` 的入口。
+- 验证：
+  - `cd apps/jingongxiaozi && npm run build` -> pass。
+  - Android build 首次被系统 `signal 9` 杀掉；停止 Gradle daemon 并限制 `GRADLE_OPTS='-Dorg.gradle.jvmargs=-Xmx1024m -Dorg.gradle.workers.max=1'` 后 `npm run tauri -- android build --apk --debug --target aarch64` -> pass。
+  - 新 APK：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，sha256 `aed5bd4f8b5daf222ce86fb73adb56a6d567b1842b58e71de41780f98deb929f`。
+  - 真机安装成功，包 `cn.edu.zju.jingongxiaozi` `lastUpdateTime=2026-06-13 12:11:36`。
+  - WebView DevTools 验证：直接打开 map 后 `isLegacy=true`、`hasLegacyMap=true`、`has3dMap=false`；发送 chat directive 后仍保持地图；`open-map` fixture 后保持 legacy 地图；地图打开后再发 `smalltalk-no-tool` fixture 仍保持 legacy 地图，不弹回对话页。
+  - 截图：`logs/device-acceptance/2026-06-13-map-shell-preserve-after-smalltalk.png`。
+- F010 保持 `active`：自动化验收通过；等待用户对新 APK 做真实声音采集体验确认。
