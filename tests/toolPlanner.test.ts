@@ -4,6 +4,8 @@ import { DemoToolRuntime, parseAssistantToolDeclaration } from "../src/toolPlann
 
 describe("DemoToolRuntime", () => {
   it("instructs the realtime model to emit only one fixed declaration in tool mode", () => {
+    expect(DEFAULT_SYSTEM_ROLE).toContain("金工小子");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("浙江大学紫金港校区金工中心");
     expect(DEFAULT_SYSTEM_ROLE).toContain("固定工具声明句");
     expect(DEFAULT_SYSTEM_ROLE).toContain("是保留字");
     expect(DEFAULT_SYSTEM_ROLE).toContain("不要在一轮里输出多个工具声明");
