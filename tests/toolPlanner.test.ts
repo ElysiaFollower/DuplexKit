@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SYSTEM_ROLE } from "../src/runtimeSettings.js";
 import { DemoToolRuntime, parseAssistantToolDeclaration } from "../src/toolPlanner.js";
 
 describe("DemoToolRuntime", () => {
+  it("instructs the realtime model to emit only one fixed declaration in tool mode", () => {
+    expect(DEFAULT_SYSTEM_ROLE).toContain("整轮回复只能包含下面某一个固定句式本身");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("句式前后都不能添加任何解释");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("工具调用声明说完后立即停止本轮回复");
+    expect(DEFAULT_SYSTEM_ROLE).not.toContain("你可以简短闲聊");
+  });
+
   it("plans map open from assistant declaration", () => {
     const runtime = new DemoToolRuntime();
     expect(runtime.plan("我来调用地图工具：打开地图。")).toMatchObject({

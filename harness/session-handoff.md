@@ -12,7 +12,7 @@
 - 分支：`main`
 - 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
 - 当前功能项：F010 `active`
-- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复 assistant 工具声明带补充句时 Planner 不触发工具的问题，下一步等待用户复测打开地图和起终点。
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复 assistant 工具声明带补充句时 Planner 不触发工具的问题；已收紧系统提示词，下一步等待用户复测打开地图和起终点。
 
 ## 当前已验证状态
 
@@ -61,6 +61,10 @@
   - 真实 trace 里 `asr.transcript` 为“现在请你打开地图”，assistant response 为“我来调用地图工具：打开地图。地图打开后...”，但旧 Planner 判成 `no_action`，没有发送 `tool_request`。
   - 已允许规范工具声明句在回复开头后接补充句；地点参数只截取声明句内部。
   - 验证：`npm test -- tests/toolPlanner.test.ts` -> 12 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 29 tests passed；`./scripts/harness-check.sh` -> pass。
+- 工具调用系统提示词收紧：
+  - `DEFAULT_SYSTEM_ROLE` 明确工具调用模式整轮回复只能包含一个固定声明句本身；句式前后不能添加解释、道歉、寒暄、等待提示或补充说明；声明后立即停止本轮回复。
+  - 删除旧提示词中“工具结果出来前可以简短闲聊”的模糊许可。
+  - 验证：`npm test -- tests/toolPlanner.test.ts` -> 13 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 30 tests passed；`./scripts/harness-check.sh` -> pass。
 
 ## 仍损坏或未验证
 

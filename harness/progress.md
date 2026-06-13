@@ -298,3 +298,11 @@
 - 已修复 `parseAssistantToolDeclaration`：允许规范工具声明句出现在 assistant response 开头并带后续补充句；地点参数只截取声明句内部，避免“设置终点为西门。你稍等一下”把补充句吃进参数。
 - 回归测试覆盖本次真实失败形态和参数截断。
 - 验证：`npm test -- tests/toolPlanner.test.ts` -> 12 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 29 tests passed；`./scripts/harness-check.sh` -> pass。
+
+### 2026-06-13 - F010 收紧工具调用系统提示词
+
+- 用户指出：既然后端 Planner 是规则解析，就必须在提示词里把工具调用输出契约写清楚，不能期待语音模型自然稳定命中。
+- 已收紧 `DEFAULT_SYSTEM_ROLE`：工具调用模式整轮回复只能包含一个固定声明句本身；句式前后不能添加解释、道歉、寒暄、等待提示或补充说明；声明后立即停止本轮回复等待后端执行。
+- 删除旧提示词里“工具结果出来前可以简短闲聊”的模糊许可。
+- 回归测试锁住提示词契约，防止后续又引入“可以补充说明”的冲突规则。
+- 验证：`npm test -- tests/toolPlanner.test.ts` -> 13 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 30 tests passed；`./scripts/harness-check.sh` -> pass。
