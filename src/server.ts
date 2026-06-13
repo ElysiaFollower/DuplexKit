@@ -6,8 +6,9 @@ import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
 import { getRuntimeSettings, updateRuntimeSettings } from "./runtimeSettings.js";
 import { saveSessionLog, SessionLogPayload } from "./sessionLogs.js";
 import { TOOL_DEFINITIONS, TOOL_PROMPT_TEMPLATES } from "./toolPlanner.js";
-import { attachVolcRealtimeBridge } from "./volcRealtime.js";
+import { attachVolcRealtimeBridge, injectRealtimeDebugAudio, listRealtimeDebugSessions } from "./volcRealtime.js";
 import { APP_TOOL_NAMES, buildRealtimeProtocol } from "./protocol.js";
+import { loadRealtimeDebugFixturePcm, RealtimeDebugFixtureRequest } from "./realtimeDebugFixtures.js";
 
 const appToolNameSet = new Set<string>(APP_TOOL_NAMES);
 
@@ -55,6 +56,21 @@ export function buildServer(config: AppConfig = loadConfig()) {
     promptTemplates: TOOL_PROMPT_TEMPLATES,
     realtimeProtocol: buildRealtimeProtocol(config.realtime)
   }));
+
+  app.get("/api/debug/realtime-sessions", async () => ({
+    sessions: listRealtimeDebugSessions()
+  }));
+
+  app.post("/api/debug/realtime-fixture", async (request, reply) => {
+    const parsed = RealtimeDebugFixtureRequest.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid realtime fixture request", issues: parsed.error.issues });
+    }
+    const pcm = await loadRealtimeDebugFixturePcm(parsed.data.fixture);
+    const result = await injectRealtimeDebugAudio(pcm, { silenceMs: parsed.data.silenceMs });
+    if (!result.ok) return reply.status(409).send(result);
+    return reply.send({ ...result, fixture: parsed.data.fixture });
+  });
 
   app.post("/api/session-logs", async (request, reply) => {
     const parsed = SessionLogPayload.safeParse(request.body);

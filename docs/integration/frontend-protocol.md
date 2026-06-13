@@ -33,6 +33,23 @@
 { "type": "stop" }
 ```
 
+调试模式下，前端可以回传本地环境或错误。后端只记录日志，不转发给实时模型：
+
+```json
+{
+  "type": "client_debug",
+  "level": "error",
+  "event": "microphone_api_missing",
+  "message": "getUserMedia not found",
+  "data": {
+    "secureContext": false,
+    "hasGetUserMedia": false
+  }
+}
+```
+
+后端会把这类消息打印到启动 `npm run dev` 的终端，并追加写入 `logs/client-debug/YYYY-MM-DD.jsonl`。该目录中的 `.jsonl` 文件是本地调试工件，不应提交。
+
 ```json
 {
   "type": "tool_result",

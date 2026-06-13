@@ -33,8 +33,18 @@ export const StopControlSchema = z.object({
   type: z.literal("stop")
 });
 
+export const ClientDebugMessageSchema = z.object({
+  type: z.literal("client_debug"),
+  level: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  event: z.string().trim().min(1),
+  message: z.string().trim().optional(),
+  at: z.string().trim().optional(),
+  data: z.unknown().optional()
+});
+
 export type ClientControlMessage =
   | z.infer<typeof StopControlSchema>
+  | z.infer<typeof ClientDebugMessageSchema>
   | ToolResultInput;
 
 export function normalizeToolResultInput(message: z.infer<typeof ToolResultInputSchema>): ToolResultInput {
@@ -94,6 +104,12 @@ export function buildRealtimeProtocol(config: {
       {
         type: "stop",
         description: "关闭当前 realtime 会话。"
+      },
+      {
+        type: "client_debug",
+        description: "调试模式下应用端回传本地环境、权限、WebSocket、麦克风和播放错误；后端只记录日志，不转发给实时模型。",
+        required: ["event"],
+        optional: ["level", "message", "at", "data"]
       }
     ],
     serverMessages: [

@@ -13,6 +13,7 @@
     "test": "vitest run",
     "fixtures:audio": "node scripts/generate-audio-fixtures.mjs",
     "test:realtime-fixtures": "npm run build && node scripts/realtime-fixture-test.mjs",
+    "debug:realtime-fixture": "node scripts/inject-realtime-fixture.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:local": "scripts/local-smoke.sh",
     "config:check": "node dist/scripts/config-check.js",

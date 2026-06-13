@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { RawData, WebSocket as ClientSocket } from "ws";
 import WebSocket from "ws";
+import { appendClientDebugLog } from "./clientDebugLogs.js";
 import type { AppConfig } from "./config.js";
 import { getRuntimeSettings } from "./runtimeSettings.js";
 import {
@@ -12,7 +13,13 @@ import {
   toolResultPrompt,
   type ToolResultInput
 } from "./toolPlanner.js";
-import { normalizeToolResultInput, StopControlSchema, ToolResultInputSchema, toToolRequestPayload } from "./protocol.js";
+import {
+  ClientDebugMessageSchema,
+  normalizeToolResultInput,
+  StopControlSchema,
+  ToolResultInputSchema,
+  toToolRequestPayload
+} from "./protocol.js";
 
 type RealtimeConfig = AppConfig["realtime"];
 type ByteBuffer = Buffer<ArrayBufferLike>;
@@ -21,6 +28,20 @@ type PendingToolInvocation = {
   timeout: ReturnType<typeof setTimeout>;
   state: "waiting" | "resolved" | "timed_out";
 };
+
+const activeBridges = new Map<string, VolcRealtimeBridge>();
+let latestBridgeId = "";
+
+export function listRealtimeDebugSessions() {
+  return [...activeBridges.values()].map((bridge) => bridge.debugInfo());
+}
+
+export async function injectRealtimeDebugAudio(pcm: ByteBuffer, options: { frameBytes?: number; frameMs?: number; silenceMs?: number } = {}) {
+  const bridge = latestBridgeId ? activeBridges.get(latestBridgeId) : undefined;
+  if (!bridge) return { ok: false as const, error: "No active realtime app session" };
+  await bridge.injectAudio(pcm, options);
+  return { ok: true as const, session: bridge.debugInfo(), bytes: pcm.length };
+}
 
 const events = {
   startConnection: 1,
@@ -101,6 +122,9 @@ class VolcRealtimeBridge {
   private pendingToolCalls = new Map<string, PendingToolInvocation>();
 
   constructor(private readonly client: ClientSocket, private readonly config: RealtimeConfig) {
+    activeBridges.set(this.sessionId, this);
+    latestBridgeId = this.sessionId;
+
     this.upstream = new WebSocket(config.endpoint, {
       headers: {
         "X-Api-App-ID": config.appId,
@@ -154,6 +178,12 @@ class VolcRealtimeBridge {
         return;
       }
 
+      const clientDebug = ClientDebugMessageSchema.safeParse(message);
+      if (clientDebug.success) {
+        this.handleClientDebug(clientDebug.data);
+        return;
+      }
+
       this.sendJson({ type: "error", message: "Invalid client control message" });
     } catch {
       this.sendJson({ type: "error", message: "Invalid client control message" });
@@ -163,6 +193,8 @@ class VolcRealtimeBridge {
   close() {
     if (this.closed) return;
     this.closed = true;
+    activeBridges.delete(this.sessionId);
+    if (latestBridgeId === this.sessionId) latestBridgeId = [...activeBridges.keys()].at(-1) || "";
     for (const pending of this.pendingToolCalls.values()) clearTimeout(pending.timeout);
     this.pendingToolCalls.clear();
     if (this.upstream.readyState === WebSocket.OPEN) {
@@ -170,6 +202,32 @@ class VolcRealtimeBridge {
       this.upstream.send(packet(events.finishConnection, {}));
     }
     this.upstream.close();
+  }
+
+  debugInfo() {
+    return {
+      sessionId: this.sessionId,
+      connectionStarted: this.connectionStarted,
+      sessionStarted: this.sessionStarted,
+      closed: this.closed,
+      queuedAudioFrames: this.queuedAudio.length
+    };
+  }
+
+  async injectAudio(pcm: ByteBuffer, options: { frameBytes?: number; frameMs?: number; silenceMs?: number } = {}) {
+    const frameBytes = options.frameBytes ?? 4800;
+    const frameMs = options.frameMs ?? 100;
+    const silenceMs = options.silenceMs ?? 1000;
+    for (let offset = 0; offset < pcm.length; offset += frameBytes) {
+      this.sendAudio(pcm.subarray(offset, Math.min(pcm.length, offset + frameBytes)));
+      await delay(frameMs);
+    }
+    const silenceFrames = Math.max(0, Math.ceil(silenceMs / frameMs));
+    const silence = Buffer.alloc(frameBytes);
+    for (let i = 0; i < silenceFrames; i += 1) {
+      this.sendAudio(silence);
+      await delay(frameMs);
+    }
   }
 
   private handleUpstreamMessage(data: Buffer) {
@@ -315,6 +373,30 @@ class VolcRealtimeBridge {
     this.pendingToolCalls.delete(result.toolCallId);
     const normalized = this.tools.resolve(pending.call, result);
     this.finalizeToolResult(normalized);
+  }
+
+  private handleClientDebug(message: {
+    level: "debug" | "info" | "warn" | "error";
+    event: string;
+    message?: string;
+    at?: string;
+    data?: unknown;
+  }) {
+    const payload = {
+      sessionId: this.sessionId,
+      at: message.at || new Date().toISOString(),
+      level: message.level,
+      event: message.event,
+      message: message.message,
+      data: message.data
+    };
+    const line = `[client_debug] ${JSON.stringify(payload)}`;
+    if (message.level === "error") console.error(line);
+    else if (message.level === "warn") console.warn(line);
+    else console.info(line);
+    appendClientDebugLog(payload).catch((error: unknown) => {
+      console.warn(`[client_debug_log_failed] ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   private async resolvePendingToolCall(toolCallId: string) {
@@ -484,4 +566,8 @@ function toBuffer(data: RawData): ByteBuffer {
   if (Buffer.isBuffer(data)) return data;
   if (Array.isArray(data)) return Buffer.concat(data);
   return Buffer.from(data);
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }

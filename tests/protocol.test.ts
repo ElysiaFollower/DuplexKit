@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   APP_TOOL_NAMES,
   buildRealtimeProtocol,
+  ClientDebugMessageSchema,
   INTERNAL_CONTROL_TOOL_NAMES,
   normalizeToolResultInput,
   ToolResultInputSchema,
@@ -9,6 +10,22 @@ import {
 } from "../src/protocol.js";
 
 describe("service protocol", () => {
+  it("accepts client debug messages without treating them as tool calls", () => {
+    const parsed = ClientDebugMessageSchema.parse({
+      type: "client_debug",
+      level: "error",
+      event: "microphone_error",
+      message: "getUserMedia not found",
+      data: { secureContext: false }
+    });
+
+    expect(parsed).toMatchObject({
+      type: "client_debug",
+      level: "error",
+      event: "microphone_error"
+    });
+  });
+
   it("accepts app tool results for map and navigation actions", () => {
     const parsed = ToolResultInputSchema.parse({
       type: "tool_result",
@@ -63,6 +80,7 @@ describe("service protocol", () => {
     ]);
     expect(INTERNAL_CONTROL_TOOL_NAMES).toEqual(["control.kill"]);
     expect(protocol.textBoundaries.messageEndType).toBe("message_end");
+    expect(protocol.clientMessages.map((message) => message.type)).toContain("client_debug");
     expect(protocol.textBoundaries.emittedFor).toEqual(["asr_end", "llm_end", "tts_sentence_end", "tts_end"]);
     expect(protocol.outputAudio).toMatchObject({
       format: "pcm_f32le",
