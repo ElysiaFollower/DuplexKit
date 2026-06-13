@@ -15,6 +15,7 @@ mobile-demo/src-tauri/gen/android/.gradle/
 mobile-demo/src-tauri/gen/android/build/
 mobile-demo/src-tauri/gen/android/buildSrc/build/
 mobile-demo/src-tauri/gen/android/app/build/
+apps/jingongxiaozi/
 logs/session/*.json
 logs/client-debug/
 logs/client-debug/*.jsonl
