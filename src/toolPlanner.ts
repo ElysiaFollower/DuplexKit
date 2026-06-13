@@ -302,53 +302,13 @@ export function parseAssistantToolDeclaration(assistantResponse: string): Planne
   const text = normalizeDeclaration(assistantResponse);
   if (!text) return { action: "no_action", reason: "empty assistant response" };
 
-  if (hasDeclaration(text, "我来调用地图工具:打开地图")) {
-    return { action: "tool_call", tool: "map.open", args: {}, spoken: "我来调用地图工具：打开地图。" };
+  const declarations = findToolDeclarations(text);
+  if (declarations.length === 0) {
+    return { action: "no_action", reason: "assistant response did not match tool declaration grammar" };
   }
 
-  if (hasDeclaration(text, "我来调用地图工具:关闭地图")) {
-    return { action: "tool_call", tool: "map.close", args: {}, spoken: "我来调用地图工具：关闭地图。" };
-  }
-
-  const origin = exactValue(text, "我来调用地图工具:设置起点为");
-  if (origin) {
-    return {
-      action: "tool_call",
-      tool: "map.set_origin",
-      args: { place: origin },
-      spoken: `我来调用地图工具：设置起点为${origin}。`
-    };
-  }
-
-  const destination = exactValue(text, "我来调用地图工具:设置终点为");
-  if (destination) {
-    return {
-      action: "tool_call",
-      tool: "map.set_destination",
-      args: { place: destination },
-      spoken: `我来调用地图工具：设置终点为${destination}。`
-    };
-  }
-
-  const navigationTarget = exactValue(text, "我来调用导航工具:导航到");
-  if (navigationTarget) {
-    return {
-      action: "tool_call",
-      tool: "navigation.start",
-      args: { place: navigationTarget },
-      spoken: `我来调用导航工具：导航到${navigationTarget}。`
-    };
-  }
-
-  if (hasDeclaration(text, "我来调用导航工具:开始导航")) {
-    return { action: "tool_call", tool: "navigation.start", args: {}, spoken: "我来调用导航工具：开始导航。" };
-  }
-
-  if (hasDeclaration(text, "我来调用控制工具:取消当前工具调用")) {
-    return { action: "tool_call", tool: "control.kill", args: {}, spoken: "我来调用控制工具：取消当前工具调用。" };
-  }
-
-  return { action: "no_action", reason: "assistant response did not match tool declaration grammar" };
+  const navigation = declarations.find((declaration) => declaration.tool === "navigation.start");
+  return stripDeclarationIndex(navigation || declarations[0]);
 }
 
 export function toolStartedPrompt(call: ToolCallState, spoken: string) {
@@ -389,15 +349,105 @@ function normalizeDeclaration(text: string) {
   return text.replace(/\s+/g, "").replace(/：/g, ":").replace(/[。！？,.!?]+$/g, "");
 }
 
-function hasDeclaration(text: string, declaration: string) {
-  return text === declaration || text.startsWith(`${declaration}。`) || text.startsWith(`${declaration}.`);
+type ParsedToolDeclaration = Extract<PlannerDecision, { action: "tool_call" }> & { index: number };
+
+const DECLARATION_BOUNDARY = /[。！？.!?；;，,]/;
+const DECLARATION_QUOTES = /[“”"『』「」'‘’]/;
+const DECLARATION_END = /[。！？,.!?；;，,]/;
+
+function findToolDeclarations(text: string): ParsedToolDeclaration[] {
+  const declarations: ParsedToolDeclaration[] = [];
+  pushFixedDeclarations(declarations, text, "我来调用地图工具:打开地图", {
+    action: "tool_call",
+    tool: "map.open",
+    args: {},
+    spoken: "我来调用地图工具：打开地图。"
+  });
+  pushFixedDeclarations(declarations, text, "我来调用地图工具:关闭地图", {
+    action: "tool_call",
+    tool: "map.close",
+    args: {},
+    spoken: "我来调用地图工具：关闭地图。"
+  });
+  pushValueDeclarations(declarations, text, "我来调用地图工具:设置起点为", "map.set_origin", (place) => `我来调用地图工具：设置起点为${place}。`);
+  pushValueDeclarations(declarations, text, "我来调用地图工具:设置终点为", "map.set_destination", (place) => `我来调用地图工具：设置终点为${place}。`);
+  pushValueDeclarations(declarations, text, "我来调用导航工具:导航到", "navigation.start", (place) => `我来调用导航工具：导航到${place}。`);
+  pushFixedDeclarations(declarations, text, "我来调用导航工具:开始导航", {
+    action: "tool_call",
+    tool: "navigation.start",
+    args: {},
+    spoken: "我来调用导航工具：开始导航。"
+  });
+  pushFixedDeclarations(declarations, text, "我来调用控制工具:取消当前工具调用", {
+    action: "tool_call",
+    tool: "control.kill",
+    args: {},
+    spoken: "我来调用控制工具：取消当前工具调用。"
+  });
+  return declarations.sort((left, right) => left.index - right.index);
 }
 
-function exactValue(text: string, prefix: string) {
-  if (!text.startsWith(prefix)) return "";
-  const value = text.slice(prefix.length).split(/[。！？,.!?；;，,]/)[0] || "";
-  if (!value || value.includes(":")) return "";
+function pushFixedDeclarations(
+  declarations: ParsedToolDeclaration[],
+  text: string,
+  declaration: string,
+  decision: Extract<PlannerDecision, { action: "tool_call" }>
+) {
+  for (const index of declarationIndexes(text, declaration)) {
+    const end = index + declaration.length;
+    if (text[end] && !DECLARATION_END.test(text[end])) continue;
+    declarations.push({ ...decision, index });
+  }
+}
+
+function pushValueDeclarations(
+  declarations: ParsedToolDeclaration[],
+  text: string,
+  prefix: string,
+  tool: ToolName,
+  spoken: (place: string) => string
+) {
+  for (const index of declarationIndexes(text, prefix)) {
+    const value = valueAfterPrefix(text, index + prefix.length);
+    if (!value) continue;
+    declarations.push({
+      action: "tool_call",
+      tool,
+      args: { place: value },
+      spoken: spoken(value),
+      index
+    });
+  }
+}
+
+function declarationIndexes(text: string, declaration: string) {
+  const indexes: number[] = [];
+  let start = 0;
+  while (start < text.length) {
+    const index = text.indexOf(declaration, start);
+    if (index === -1) break;
+    if (isValidDeclarationStart(text, index)) indexes.push(index);
+    start = index + declaration.length;
+  }
+  return indexes;
+}
+
+function isValidDeclarationStart(text: string, index: number) {
+  if (index === 0) return true;
+  const previous = text[index - 1];
+  if (DECLARATION_QUOTES.test(previous)) return false;
+  return DECLARATION_BOUNDARY.test(previous);
+}
+
+function valueAfterPrefix(text: string, start: number) {
+  const value = text.slice(start).split(DECLARATION_END)[0] || "";
+  if (!value || value.includes(":") || DECLARATION_QUOTES.test(value)) return "";
   return value.slice(0, 40);
+}
+
+function stripDeclarationIndex(declaration: ParsedToolDeclaration): PlannerDecision {
+  const { index: _index, ...decision } = declaration;
+  return decision;
 }
 
 function delay(ms: number) {

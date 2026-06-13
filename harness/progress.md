@@ -306,3 +306,29 @@
 - 删除旧提示词里“工具结果出来前可以简短闲聊”的模糊许可。
 - 回归测试锁住提示词契约，防止后续又引入“可以补充说明”的冲突规则。
 - 验证：`npm test -- tests/toolPlanner.test.ts` -> 13 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 30 tests passed；`./scripts/harness-check.sh` -> pass。
+
+### 2026-06-13 - F010 真实对话日志复盘后的工具和地点解析修复
+
+- 用户完成真实语音测试后，要求直接读取 realtime trace 复盘问题。
+- 最新真实 session `b8f5bede-165d-49c0-afc4-a432ada58ab8` 证明：
+  - `208多媒体教室` 已被后端 Planner 正确解析成 `map.set_origin { place: "208多媒体教室" }`，但金工小子 app 回传 `起点已设置为110 教室`。根因是 `roomResolver` 对 `110 教室` 的泛化字段 `教室` 和 `208 多媒体教室` 的具体字段打分并列，前者因数据顺序先出现而胜出。
+  - 模型把固定工具声明放在普通句后面时，旧后端 Planner 不触发；例如“有这个可能...。我来调用地图工具：设置起点为208多媒体教室。”
+  - 用户要求“设置终点并启动导航”时，模型可能一轮输出设置终点和导航两条声明；后端现优先选择 `navigation.start`，因为该工具可以携带目的地并一次完成用户意图。
+  - 模型曾在无真实 `tool_request/tool_result` 的情况下口头声称“工具结果返回”。提示词已补充“不要声称工具结果已经返回；只有听到后端注入的工具结果才能告知外部动作结果”。
+- 已修复：
+  - `parseAssistantToolDeclaration` 允许固定声明出现在句子边界后，跳过被引号包住的历史命令复述；多声明时优先导航声明。
+  - `apps/jingongxiaozi/src/duplexkit/roomResolver.ts` 提高“房号 + 房间名”和房号前缀匹配分，避免 `208多媒体教室` 被通用“教室”错配到 `110`。
+  - 新增 `tests/jingongRoomResolver.test.ts`，锁定 `208多媒体教室 -> 208` 和 `114教室 -> 114`。
+- 验证：
+  - `npm test -- tests/toolPlanner.test.ts tests/jingongRoomResolver.test.ts` -> 2 files / 18 tests passed。
+  - `npm test` -> 6 files / 35 tests passed。
+  - `npm run build` -> pass。
+  - `cd apps/jingongxiaozi && npm run build` -> pass。
+  - `./scripts/harness-check.sh` -> pass。
+  - Android APK 构建成功，路径 `apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，大小 246M，sha256 `f14798ebfb0ce6f15b25f6a583ee5e15e096fbcc57133dbc0bf5e7058a772c80`。
+  - 真机安装成功，包 `cn.edu.zju.jingongxiaozi` `lastUpdateTime=2026-06-13 16:48:28`，`INTERNET`、`MODIFY_AUDIO_SETTINGS`、`RECORD_AUDIO` 均 granted。
+  - 新 APK + 后端命令行 fixture 复验：
+    - session `da3c7f48-7690-46a0-85b2-8c2a10f73f27`：`open-map` -> ASR “打开地图。”，Planner `map.open`，app 回传 `tool_result success 地图已打开`。
+    - session `218cbf1e-1316-49cf-ab81-7e89e4ea4ff6`：`navigate-beijing-south` -> ASR “导航到北京南站。”，Planner `navigation.start { place: "北京南站" }`，app 回传 `tool_result success 导航已启动...`。
+  - 截图证据：`logs/device-acceptance/2026-06-13-after-connect-new-apk.png`、`logs/device-acceptance/2026-06-13-after-nav-fixture-new-apk.png`。
+- 仍需注意：`北京南站` 这类非金工小子室内地点目前会走 app 的既有 fallback 目的地，trace 中表现为 `108-2F04 钳工`；这不是本次 208/114 修复范围，后续若要支持外部地点需要单独定义产品行为。

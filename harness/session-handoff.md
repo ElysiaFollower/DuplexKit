@@ -12,7 +12,7 @@
 - 分支：`main`
 - 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
 - 当前功能项：F010 `active`
-- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复 assistant 工具声明带补充句时 Planner 不触发工具的问题；已收紧系统提示词，下一步等待用户复测打开地图和起终点。
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复工具声明解析鲁棒性和金工小子 208/114 房间匹配问题；新 APK 已安装并复验 open-map / navigation.start 工具链路，下一步等待用户真实语音复测。
 
 ## 当前已验证状态
 
@@ -65,17 +65,28 @@
   - `DEFAULT_SYSTEM_ROLE` 明确工具调用模式整轮回复只能包含一个固定声明句本身；句式前后不能添加解释、道歉、寒暄、等待提示或补充说明；声明后立即停止本轮回复。
   - 删除旧提示词中“工具结果出来前可以简短闲聊”的模糊许可。
   - 验证：`npm test -- tests/toolPlanner.test.ts` -> 13 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 30 tests passed；`./scripts/harness-check.sh` -> pass。
+- 真实对话日志复盘后的修复：
+  - 最新真实 session `b8f5bede-165d-49c0-afc4-a432ada58ab8` 证明 `208多媒体教室` 后端 Planner 已正确下发 `map.set_origin { place: "208多媒体教室" }`，但 app `roomResolver` 因通用“教室”匹配并列而回传 `110 教室`。
+  - 已修复 `apps/jingongxiaozi/src/duplexkit/roomResolver.ts`：提高“房号 + 房间名”和房号前缀匹配分；新增 `tests/jingongRoomResolver.test.ts` 锁定 `208多媒体教室 -> 208` 和 `114教室 -> 114`。
+  - 已修复 `src/toolPlanner.ts`：允许固定声明出现在句子边界后，跳过引号内历史命令复述；多声明时优先 `navigation.start`，覆盖“设置终点并启动导航”的真实形态。
+  - 已更新 `DEFAULT_SYSTEM_ROLE`：用户同时要求设置终点并启动导航时只输出导航声明；不要声称工具结果已经返回，除非听到后端注入的工具结果。
+  - 验证：`npm test -- tests/toolPlanner.test.ts tests/jingongRoomResolver.test.ts` -> 2 files / 18 tests passed；`npm test` -> 6 files / 35 tests passed；`npm run build` -> pass；`cd apps/jingongxiaozi && npm run build` -> pass；`./scripts/harness-check.sh` -> pass。
+  - 新 APK：`apps/jingongxiaozi/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`，246M，sha256 `f14798ebfb0ce6f15b25f6a583ee5e15e096fbcc57133dbc0bf5e7058a772c80`；`adb install` 成功，包 `lastUpdateTime=2026-06-13 16:48:28`。
+  - 新 APK 真机 fixture 复验：
+    - session `da3c7f48-7690-46a0-85b2-8c2a10f73f27`：`open-map` -> ASR “打开地图。”，Planner `map.open`，app `tool_result success 地图已打开`。
+    - session `218cbf1e-1316-49cf-ab81-7e89e4ea4ff6`：`navigate-beijing-south` -> ASR “导航到北京南站。”，Planner `navigation.start { place: "北京南站" }`，app `tool_result success 导航已启动...`。
 
 ## 仍损坏或未验证
 
 - 新的浮动控制条已真机复验；用户若仍看到“正在聆听”，大概率是旧界面残留/未刷新，需要重启 app 或确认包更新时间。
 - 麦克风真实连续语音仍需用户继续人工路径。
-- 地图保持修复和工具声明解析修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
+- 地图保持修复、工具声明解析修复和 208/114 房间匹配修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
+- `北京南站` 这类非金工小子室内地点目前仍走 app 既有 fallback 房间，trace 中表现为 `108-2F04 钳工`；这不是 208/114 修复范围，后续若要支持外部地点需单独定义产品行为。
 - fixture 跑完后的 `连接失败 / 重新连接` 是无持续音频输入时的上游 idle close 表现，后续可优化为更温和的 `未连接` 文案，但不阻塞真实语音测试。
 
 ## 清洁状态
 
-- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`。
+- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`，当前 agent 会话中 PID `33912`。
 - `logs/device-acceptance/`、`logs/client-debug/`、`logs/realtime-trace/` 为本地证据目录并已 gitignore。
 - 当前工作树包含本轮 realtime trace 日志补强改动；不要回滚用户或既有改动。
 
@@ -92,7 +103,7 @@ adb shell am start -n cn.edu.zju.jingongxiaozi/.MainActivity
 2. 真实声音采集测试：
    - 在 app 浮动控制条点 `连接后端`。
    - 状态变成 `已连接，未开麦` 后立刻点 `开始聆听`。
-   - 用户对手机说“打开地图”“导航到北京南站”“随便聊两句”等。
+   - 用户对手机说“打开地图”“设置起点为208多媒体教室”“设置终点为114教室并启动导航”“随便聊两句”等。
    - 验收：app 能收到文本/音频回复，并按工具请求切到地图或导航。
 
 ## 命令

@@ -7,6 +7,8 @@ describe("DemoToolRuntime", () => {
     expect(DEFAULT_SYSTEM_ROLE).toContain("整轮回复只能包含下面某一个固定句式本身");
     expect(DEFAULT_SYSTEM_ROLE).toContain("句式前后都不能添加任何解释");
     expect(DEFAULT_SYSTEM_ROLE).toContain("工具调用声明说完后立即停止本轮回复");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("设置终点并启动导航");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("不要声称工具结果已经返回");
     expect(DEFAULT_SYSTEM_ROLE).not.toContain("你可以简短闲聊");
   });
 
@@ -23,6 +25,20 @@ describe("DemoToolRuntime", () => {
     expect(runtime.plan("我来调用地图工具：打开地图。地图打开后，你要是想设置起点或终点，直接告诉我就行。")).toMatchObject({
       action: "tool_call",
       tool: "map.open"
+    });
+  });
+
+  it("plans tool calls when the assistant puts the fixed declaration after a sentence boundary", () => {
+    expect(parseAssistantToolDeclaration("有这个可能，我再准确输入试试。我来调用地图工具：设置起点为208多媒体教室。")).toMatchObject({
+      action: "tool_call",
+      tool: "map.set_origin",
+      args: { place: "208多媒体教室" }
+    });
+  });
+
+  it("does not plan from quoted retrospective tool declarations", () => {
+    expect(parseAssistantToolDeclaration("刚才后端收到的命令是“我来调用地图工具：设置起点为208多媒体教室”。")).toMatchObject({
+      action: "no_action"
     });
   });
 
@@ -46,6 +62,16 @@ describe("DemoToolRuntime", () => {
       action: "tool_call",
       tool: "navigation.start",
       args: { place: "北京南站" }
+    });
+  });
+
+  it("prefers navigation when the assistant emits destination and navigation declarations in one response", () => {
+    expect(
+      parseAssistantToolDeclaration("好的，我先帮你设置终点为114教室，再启动导航。我来调用地图工具：设置终点为114教室。设置完成后，我来调用导航工具：导航到114教室。")
+    ).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.start",
+      args: { place: "114教室" }
     });
   });
 
