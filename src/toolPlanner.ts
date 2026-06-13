@@ -302,11 +302,11 @@ export function parseAssistantToolDeclaration(assistantResponse: string): Planne
   const text = normalizeDeclaration(assistantResponse);
   if (!text) return { action: "no_action", reason: "empty assistant response" };
 
-  if (text === "我来调用地图工具:打开地图") {
+  if (hasDeclaration(text, "我来调用地图工具:打开地图")) {
     return { action: "tool_call", tool: "map.open", args: {}, spoken: "我来调用地图工具：打开地图。" };
   }
 
-  if (text === "我来调用地图工具:关闭地图") {
+  if (hasDeclaration(text, "我来调用地图工具:关闭地图")) {
     return { action: "tool_call", tool: "map.close", args: {}, spoken: "我来调用地图工具：关闭地图。" };
   }
 
@@ -340,11 +340,11 @@ export function parseAssistantToolDeclaration(assistantResponse: string): Planne
     };
   }
 
-  if (text === "我来调用导航工具:开始导航") {
+  if (hasDeclaration(text, "我来调用导航工具:开始导航")) {
     return { action: "tool_call", tool: "navigation.start", args: {}, spoken: "我来调用导航工具：开始导航。" };
   }
 
-  if (text === "我来调用控制工具:取消当前工具调用") {
+  if (hasDeclaration(text, "我来调用控制工具:取消当前工具调用")) {
     return { action: "tool_call", tool: "control.kill", args: {}, spoken: "我来调用控制工具：取消当前工具调用。" };
   }
 
@@ -389,9 +389,13 @@ function normalizeDeclaration(text: string) {
   return text.replace(/\s+/g, "").replace(/：/g, ":").replace(/[。！？,.!?]+$/g, "");
 }
 
+function hasDeclaration(text: string, declaration: string) {
+  return text === declaration || text.startsWith(`${declaration}。`) || text.startsWith(`${declaration}.`);
+}
+
 function exactValue(text: string, prefix: string) {
   if (!text.startsWith(prefix)) return "";
-  const value = text.slice(prefix.length);
+  const value = text.slice(prefix.length).split(/[。！？,.!?；;，,]/)[0] || "";
   if (!value || value.includes(":")) return "";
   return value.slice(0, 40);
 }

@@ -12,7 +12,7 @@
 - 分支：`main`
 - 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
 - 当前功能项：F010 `active`
-- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志，下一步等待用户复测并用 trace 定位工具参数/语音打断问题。
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复 assistant 工具声明带补充句时 Planner 不触发工具的问题，下一步等待用户复测打开地图和起终点。
 
 ## 当前已验证状态
 
@@ -57,12 +57,16 @@
   - 新增 `logs/realtime-trace/YYYY-MM-DD.jsonl`，按 `sessionId` 自动记录 ASR transcript、assistant 文本增量、Planner 决策、工具请求/结果、ChatTTSText 注入、TTS/audio 边界和错误。
   - 不记录原始音频内容，只记录事件边界和音频块大小。
   - 验证：`npm test` -> 5 files / 27 tests passed；`npm run build` -> pass；`./scripts/harness-check.sh` -> pass。
+- 工具声明解析修复：
+  - 真实 trace 里 `asr.transcript` 为“现在请你打开地图”，assistant response 为“我来调用地图工具：打开地图。地图打开后...”，但旧 Planner 判成 `no_action`，没有发送 `tool_request`。
+  - 已允许规范工具声明句在回复开头后接补充句；地点参数只截取声明句内部。
+  - 验证：`npm test -- tests/toolPlanner.test.ts` -> 12 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 29 tests passed；`./scripts/harness-check.sh` -> pass。
 
 ## 仍损坏或未验证
 
 - 新的浮动控制条已真机复验；用户若仍看到“正在聆听”，大概率是旧界面残留/未刷新，需要重启 app 或确认包更新时间。
 - 麦克风真实连续语音仍需用户继续人工路径。
-- 地图保持修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
+- 地图保持修复和工具声明解析修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
 - fixture 跑完后的 `连接失败 / 重新连接` 是无持续音频输入时的上游 idle close 表现，后续可优化为更温和的 `未连接` 文案，但不阻塞真实语音测试。
 
 ## 清洁状态

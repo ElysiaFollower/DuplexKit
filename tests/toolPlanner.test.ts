@@ -10,6 +10,14 @@ describe("DemoToolRuntime", () => {
     });
   });
 
+  it("plans map open when the assistant appends extra spoken text after the declaration", () => {
+    const runtime = new DemoToolRuntime();
+    expect(runtime.plan("我来调用地图工具：打开地图。地图打开后，你要是想设置起点或终点，直接告诉我就行。")).toMatchObject({
+      action: "tool_call",
+      tool: "map.open"
+    });
+  });
+
   it("plans map close from assistant declaration", () => {
     const runtime = new DemoToolRuntime();
     expect(runtime.plan("我来调用地图工具：关闭地图。")).toMatchObject({
@@ -30,6 +38,14 @@ describe("DemoToolRuntime", () => {
       action: "tool_call",
       tool: "navigation.start",
       args: { place: "北京南站" }
+    });
+  });
+
+  it("keeps tool arguments scoped to the declaration sentence", () => {
+    expect(parseAssistantToolDeclaration("我来调用地图工具：设置终点为西门。你稍等一下。")).toMatchObject({
+      action: "tool_call",
+      tool: "map.set_destination",
+      args: { place: "西门" }
     });
   });
 

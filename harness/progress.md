@@ -291,3 +291,10 @@
 - trace 不记录原始音频内容，只记录音频块大小和事件边界，避免日志体积和敏感内容失控。
 - 更新 `docs/integration/frontend-protocol.md` 和 `harness/observability.md`，说明 trace 位置和排查起终点/语音打断问题的读取顺序。
 - 验证：`npm test` -> 5 files / 27 tests passed；`npm run build` -> pass；`./scripts/harness-check.sh` -> pass。
+
+### 2026-06-13 - F010 修复工具声明带补充句时不触发
+
+- 用户复测发现“打开地图”后 APP 未切到地图。新的 realtime trace 证明：ASR 正确识别为“现在请你打开地图”，模型回复为“我来调用地图工具：打开地图。地图打开后...”，但 Planner 因为要求整轮回复完全等于固定句式而判成 `no_action`，因此没有下发 `tool_request`。
+- 已修复 `parseAssistantToolDeclaration`：允许规范工具声明句出现在 assistant response 开头并带后续补充句；地点参数只截取声明句内部，避免“设置终点为西门。你稍等一下”把补充句吃进参数。
+- 回归测试覆盖本次真实失败形态和参数截断。
+- 验证：`npm test -- tests/toolPlanner.test.ts` -> 12 tests passed；`npm run build` -> pass；`npm test` -> 5 files / 29 tests passed；`./scripts/harness-check.sh` -> pass。
