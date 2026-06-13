@@ -120,6 +120,8 @@ class VolcRealtimeBridge {
   private latestTranscript = "";
   private currentQuestionId = "";
   private currentAudioAllowed = true;
+  private suppressNextChatTtsClientOutput = false;
+  private suppressingChatTtsClientOutput = false;
   private pendingToolCalls = new Map<string, PendingToolInvocation>();
 
   constructor(private readonly client: ClientSocket, private readonly config: RealtimeConfig) {
@@ -309,6 +311,8 @@ class VolcRealtimeBridge {
       this.text = "";
       this.currentQuestionId = extractId(parsed.payload, "question_id") || crypto.randomUUID();
       this.currentAudioAllowed = true;
+      this.suppressNextChatTtsClientOutput = false;
+      this.suppressingChatTtsClientOutput = false;
       this.trace("upstream_to_server", "asr.start", { questionId: this.currentQuestionId });
       this.sendJson({ type: "asr_start", questionId: this.currentQuestionId });
     }
@@ -318,7 +322,16 @@ class VolcRealtimeBridge {
     }
     if (parsed.event === events.ttsStart) {
       const ttsType = extractId(parsed.payload, "tts_type");
-      this.currentAudioAllowed = true;
+      const shouldSuppress = this.suppressNextChatTtsClientOutput && ttsType === "chat_tts_text";
+      this.suppressNextChatTtsClientOutput = this.suppressNextChatTtsClientOutput && !shouldSuppress;
+      this.suppressingChatTtsClientOutput = shouldSuppress;
+      this.currentAudioAllowed = !shouldSuppress;
+      if (shouldSuppress) {
+        this.trace("upstream_to_server", "chat_tts_client_output_suppressed_start", {
+          replyId: extractId(parsed.payload, "reply_id"),
+          ttsType
+        });
+      }
       this.sendJson({
         type: "tts_start",
         replyId: extractId(parsed.payload, "reply_id"),
@@ -333,6 +346,11 @@ class VolcRealtimeBridge {
     if (parsed.event === events.ttsEnd) {
       this.sendJson({ type: "message_end", role: "audio", reason: "tts_end" });
       this.sendJson({ type: "tts_end" });
+      if (this.suppressingChatTtsClientOutput) {
+        this.trace("upstream_to_server", "chat_tts_client_output_suppressed_end");
+        this.suppressingChatTtsClientOutput = false;
+        this.currentAudioAllowed = true;
+      }
     }
     if (parsed.event === events.llmTextEnd) {
       const assistantResponse = this.text.trim();
@@ -357,12 +375,18 @@ class VolcRealtimeBridge {
         this.text += delta;
         this.trace("upstream_to_server", "assistant.delta", { delta, text: this.text });
         this.sendJson({ type: "assistant_text", delta, text: this.text });
+      } else if (delta && this.suppressingChatTtsClientOutput) {
+        this.trace("upstream_to_server", "assistant.delta_suppressed", { delta });
       }
     }
 
-    if (parsed.event === events.ttsResponse && parsed.rawPayload.length > 0 && this.currentAudioAllowed) {
-      this.trace("upstream_to_server", "audio.output_chunk", { bytes: parsed.rawPayload.length });
-      this.client.send(parsed.rawPayload, { binary: true });
+    if (parsed.event === events.ttsResponse && parsed.rawPayload.length > 0) {
+      if (this.currentAudioAllowed) {
+        this.trace("upstream_to_server", "audio.output_chunk", { bytes: parsed.rawPayload.length });
+        this.client.send(parsed.rawPayload, { binary: true });
+      } else if (this.suppressingChatTtsClientOutput) {
+        this.trace("upstream_to_server", "audio.output_chunk_suppressed", { bytes: parsed.rawPayload.length });
+      }
     }
   }
 
@@ -464,14 +488,14 @@ class VolcRealtimeBridge {
     const result = this.tools.cancelRunningCall();
     this.trace("internal", "tool.control_kill", { result });
     this.sendJson({ type: "tool", phase: "result", result });
-    this.sendChatTtsText(`${result.summary}。`, "tool_result");
+    this.sendChatTtsText(`${result.summary}。`, "tool_result", { forwardToClient: false });
   }
 
   private finalizeToolResult(result: ToolResult) {
     this.trace("internal", "tool.finalize_result", { result });
     this.sendJson({ type: "tool", phase: "result", result });
     this.sendJson({ type: "tool", phase: "result_prompt", prompt: toolResultPrompt(result) });
-    this.sendChatTtsText(`刚才的工具调用结果出来了，${result.summary}。`, "tool_result");
+    this.sendChatTtsText(`刚才的工具调用结果出来了，${result.summary}。`, "tool_result", { forwardToClient: false });
   }
 
   private buildToolRequest(call: ToolCallState, spoken: string): ToolRequest {
@@ -485,16 +509,16 @@ class VolcRealtimeBridge {
     };
   }
 
-  private sendChatRagText(externalRag: string) {
+  private sendChatTtsText(content: string, source = "server_chat_tts", options: { forwardToClient?: boolean } = {}) {
     if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
-    this.trace("server_to_upstream", "chat_rag_text", { externalRag });
-    this.upstream.send(packet(events.chatRagText, { external_rag: externalRag }, this.sessionId));
-  }
-
-  private sendChatTtsText(content: string, source = "server_chat_tts") {
-    if (this.closed || this.upstream.readyState !== WebSocket.OPEN || !this.sessionStarted) return;
-    this.trace("server_to_upstream", "chat_tts_text", { source, content });
-    this.sendJson({ type: "assistant_text", text: content, source, append: true });
+    const forwardToClient = options.forwardToClient ?? true;
+    this.trace("server_to_upstream", "chat_tts_text", { source, content, forwardToClient });
+    if (forwardToClient) {
+      this.sendJson({ type: "assistant_text", text: content, source, append: true });
+    } else {
+      this.suppressNextChatTtsClientOutput = true;
+      this.trace("server_to_client", "chat_tts_text_suppressed", { source, content });
+    }
     this.upstream.send(packet(events.chatTtsText, { start: true, content, end: true }, this.sessionId));
   }
 

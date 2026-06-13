@@ -12,7 +12,7 @@
 - 分支：`main`
 - 当前计划：`plans/active/2026-06-13-jingongxiaozi-device-acceptance.md`
 - 当前功能项：F010 `active`
-- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复工具声明解析鲁棒性和金工小子 208/114 房间匹配问题；新 APK 已安装并复验 open-map / navigation.start 工具链路，下一步等待用户真实语音复测。
+- 当前状态：正式 UI 与后端测试后门已按用户反馈修正；最新版 APK 已安装到真机；后端命令行 debug fixture 注入已在真机 app 上跑通；用户真实语音测试确认后端核心 MVP 基本可用；已修复 app 外层地图保持问题；已补后端 realtime trace 日志；已修复工具声明解析鲁棒性和金工小子 208/114 房间匹配问题；已修复工具结果语音打断正常播放的问题：工具结果继续走已验证的 `ChatTTSText` 注入上游模型，但默认不把这段注入产生的文本和音频转发给前端。下一步等待用户真实语音复测。
 
 ## 当前已验证状态
 
@@ -75,20 +75,27 @@
   - 新 APK 真机 fixture 复验：
     - session `da3c7f48-7690-46a0-85b2-8c2a10f73f27`：`open-map` -> ASR “打开地图。”，Planner `map.open`，app `tool_result success 地图已打开`。
     - session `218cbf1e-1316-49cf-ab81-7e89e4ea4ff6`：`navigate-beijing-south` -> ASR “导航到北京南站。”，Planner `navigation.start { place: "北京南站" }`，app `tool_result success 导航已启动...`。
+- 工具结果播放抑制修复：
+  - 用户明确纠偏：不要把“不播放工具结果”理解成切到 `ChatRAGText` 或静默丢弃上下文；必须保留已验证的 `ChatTTSText` 注入路径。
+  - 已实现 `sendChatTtsText(..., { forwardToClient: false })`，仅 `tool_result` 使用。后端仍发送 `300 ChatTTSText` 给上游模型；前端仍收到结构化 `tool` result；这段注入产生的 `assistant_text` 和音频不再转发给前端播放。
+  - 抑制开始点延迟到上游 `tts_start` 且 `tts_type=chat_tts_text`，避免在注入真正开始前误截断上一句正常回复尾音。
+  - `harness/decisions.md` 已写入约束：关键协议路径未经验证和用户确认不得从 `ChatTTSText` 切到 `ChatRAGText`。
+  - 验证：`npm test -- tests/toolPlanner.test.ts tests/server.test.ts` -> 2 files / 25 tests passed；`npm test` -> 6 files / 36 tests passed；`npm run build` -> pass；`./scripts/harness-check.sh` -> pass。
+  - 真机 session `9b2dc984-7db5-4050-9b3e-6e07d553d832`：WebView DevTools 点击连接后端，`npm run debug:realtime-fixture -- open-map` -> HTTP 200 / 48130 bytes；trace 显示 `planner.decision map.open -> client tool_result 地图已打开 -> chat_tts_text forwardToClient=false -> chat_tts_client_output_suppressed_start/end`，并验证 `suppressed_before_suppressed_start=false`。
 
 ## 仍损坏或未验证
 
 - 新的浮动控制条已真机复验；用户若仍看到“正在聆听”，大概率是旧界面残留/未刷新，需要重启 app 或确认包更新时间。
 - 麦克风真实连续语音仍需用户继续人工路径。
-- 地图保持修复、工具声明解析修复和 208/114 房间匹配修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
+- 地图保持修复、工具声明解析修复、208/114 房间匹配修复和工具结果播放抑制修复后的真实声音体验仍待用户确认；下一轮如复现工具参数或语音打断问题，先读取最新 `logs/realtime-trace/YYYY-MM-DD.jsonl`。
 - `北京南站` 这类非金工小子室内地点目前仍走 app 既有 fallback 房间，trace 中表现为 `108-2F04 钳工`；这不是 208/114 修复范围，后续若要支持外部地点需单独定义产品行为。
 - fixture 跑完后的 `连接失败 / 重新连接` 是无持续音频输入时的上游 idle close 表现，后续可优化为更温和的 `未连接` 文案，但不阻塞真实语音测试。
 
 ## 清洁状态
 
-- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`，当前 agent 会话中 PID `33912`。
+- 后端已用新构建产物启动：`node dist/server.js`，监听 `127.0.0.1:5177` / `10.162.230.154:5177`，当前 agent 会话中 PID `82675`。
 - `logs/device-acceptance/`、`logs/client-debug/`、`logs/realtime-trace/` 为本地证据目录并已 gitignore。
-- 当前工作树包含本轮 realtime trace 日志补强改动；不要回滚用户或既有改动。
+- 当前工作树包含本轮工具结果播放抑制、Planner 保留字扫描、协议文档和 harness 更新；不要回滚用户或既有改动。
 
 ## 下一步最佳动作
 

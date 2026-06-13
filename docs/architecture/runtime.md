@@ -37,11 +37,12 @@ ChatEnded assistant response
 -> 固定工具声明解析
 -> tool_request 发给应用端执行真实地图/导航动作
 -> 应用端回传 tool_result；若超时未回传，后端 fallback 执行 demo 结果
--> 300 ChatTTSText 播放 tool_result
--> 浏览器同步记录 assistant_text 到 Dialogue
+-> 后端下发结构化 tool result 给前端状态/调试面板
+-> 300 ChatTTSText 把工具结果注入给实时模型作为后续上下文
+-> 后端抑制这段 ChatTTSText 产生的 assistant_text 和音频下行，默认不播放工具结果语音
 ```
 
-当前 Planner 是规则版，只接受语音模型完整回复中的固定自然语言工具声明；ASR transcript 只用于显示和日志，不直接触发工具。
+当前 Planner 是规则版，把语音模型完整回复里的“我来调用{地图/导航/控制}工具...”固定声明句当作低碰撞保留字扫描；ASR transcript 只用于显示和日志，不直接触发工具。
 
 当前支持工具：
 
@@ -66,7 +67,7 @@ ChatEnded assistant response
 我来调用控制工具：取消当前工具调用。
 ```
 
-工具串行执行。pending 期间非 `control.kill` 工具会被拒绝并通过 `300 ChatTTSText` 播报“上个工具调用尚未结束，请稍后。”。
+工具串行执行。pending 期间非 `control.kill` 工具会被拒绝，并通过结构化 `tool` 事件反馈给前端调试/状态面板。
 
 `tool_request` payload：
 
@@ -100,7 +101,7 @@ ChatEnded assistant response
 
 ## 可观测性
 
-- `Dialogue`：干净对话列表，包含用户 transcript、模型原生文本，以及后端通过 `ChatTTSText` 注入的工具播报文本。
+- `Dialogue`：干净对话列表，包含用户 transcript 和模型原生文本。工具执行结果默认进入结构化 `tool` 流和 realtime trace；虽然后端仍用 `ChatTTSText` 注入给模型，但这段注入产生的文本和音频默认不转发给前端。
 - `Session flow`：开发调试流水，包含 ASR、planner、tool、Volc raw event、保存日志事件。
 - `POST /api/session-logs`：保存前端收集的 `dialogue + flow + runtime settings + tool registry + metadata` 到 `logs/session/*.json`。这是调试持久化，不是产品级用户会话历史。
 

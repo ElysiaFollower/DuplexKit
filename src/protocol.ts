@@ -97,7 +97,7 @@ export function buildRealtimeProtocol(config: {
     clientMessages: [
       {
         type: "tool_result",
-        description: "应用端完成真实地图/导航动作后回传结果；后端会把结果转成语音反馈。",
+        description: "应用端完成真实地图/导航动作后回传结果；后端会下发结构化 tool 状态，并继续通过 ChatTTSText 注入给实时模型作为上下文，但默认不把这段注入产生的文本和音频转发给前端。",
         required: ["toolCallId", "summary"],
         optional: ["tool", "status", "visibleResult", "debugNote"]
       },
@@ -123,7 +123,7 @@ export function buildRealtimeProtocol(config: {
       },
       {
         type: "assistant_text",
-        description: "模型回复文本或后端注入的工具结果文本；以 message_end(llm_end/tts_sentence_end/tts_end) 作为显示边界。"
+        description: "模型回复文本；以 message_end(llm_end/tts_sentence_end/tts_end) 作为显示边界。工具结果默认走结构化 tool 消息，工具结果注入文本不转发为 assistant_text。"
       },
       {
         type: "message_end",

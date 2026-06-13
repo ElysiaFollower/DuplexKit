@@ -55,10 +55,17 @@
 
 ### 2026-05-17 - 工具调用必须有生命周期和结果投递门控
 
-- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；当前 demo 通过 `300 ChatTTSText` 播放 `tool_started` 安抚反馈和 `tool_result` 结果反馈，并同步把注入文本发给浏览器记录到 `Dialogue`。`502 ChatRAGText` 保留为后续可验证的结果注入路线。
+- 决策：每次工具调用创建 `tool_call_id` 并绑定 turn；首版 demo 通过 `300 ChatTTSText` 播放 `tool_started` 安抚反馈和 `tool_result` 结果反馈，并同步把注入文本发给浏览器记录到 `Dialogue`。2026-06-13 起 `tool_result` 投递策略已更新为“继续用 `ChatTTSText` 注入模型上下文，但默认不下发给前端播放”，见下方同日决策。`502 ChatRAGText` 保留为后续可验证的结果注入路线。
 - 原因：工具可能耗时，用户需要即时反馈；等待期间用户可能打断或改变意图，旧结果不能乱播。
 - 否决方案：只在工具完成后注入最终结果；不记录工具调用 ID；用户打断后仍无条件播报旧结果。
 - 后续约束：running tool 被用户打断后标记为 possibly superseded，最终是否投递结果由 Planner 基于新 transcript、`tool_call_id` 和 turn 状态决定。
+
+### 2026-06-13 - 工具结果继续走 ChatTTSText 注入但不下发播放
+
+- 决策：工具结果仍使用已验证的 `300 ChatTTSText` 注入给实时语音模型作为后续上下文；当 source 为 `tool_result` 时，后端只下发结构化 `tool` 状态给前端，默认抑制这段注入产生的 `assistant_text` 和音频下行。
+- 原因：用户真实测试发现工具结果语音会打断原本正在播放的回复；但此前已验证 `ChatTTSText` 能把工具结果注入模型上下文，`502 ChatRAGText` 路径未完成同等验证。
+- 否决方案：未经验证把工具结果切到 `502 ChatRAGText`；完全静默不把工具结果注入模型；继续把“工具调用结果出来了...”作为可听语音下发前端。
+- 后续约束：关键协议路径不能在未复现实验和用户确认前替换。若将来要评估 `ChatRAGText`，必须单独开验证任务，证明上下文注入、时序和前端播放边界均满足要求。
 
 ### 2026-05-17 - 用户插话由 ASRInfo 立即停播并重规划
 

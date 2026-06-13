@@ -73,8 +73,8 @@ export const TOOL_PROMPT_TEMPLATES = [
   },
   {
     name: "tool_result",
-    channel: "300 ChatTTSText in demo, target 502 ChatRAGText",
-    purpose: "工具结果反馈。目标路线是用 502 把身体动作结果注入语音模型；当前 demo 用 300 保证稳定可听。"
+    channel: "300 ChatTTSText with client output suppressed",
+    purpose: "工具结果继续走已验证的 ChatTTSText 注入路线，让语音模型获得上下文；后端默认不把这段文本和音频转发给前端，避免打断正常对话流。"
   },
   {
     name: "ask_clarification",
@@ -351,7 +351,6 @@ function normalizeDeclaration(text: string) {
 
 type ParsedToolDeclaration = Extract<PlannerDecision, { action: "tool_call" }> & { index: number };
 
-const DECLARATION_BOUNDARY = /[。！？.!?；;，,]/;
 const DECLARATION_QUOTES = /[“”"『』「」'‘’]/;
 const DECLARATION_END = /[。！？,.!?；;，,]/;
 
@@ -433,10 +432,36 @@ function declarationIndexes(text: string, declaration: string) {
 }
 
 function isValidDeclarationStart(text: string, index: number) {
-  if (index === 0) return true;
-  const previous = text[index - 1];
-  if (DECLARATION_QUOTES.test(previous)) return false;
-  return DECLARATION_BOUNDARY.test(previous);
+  return !isInsideQuotedText(text, index);
+}
+
+function isInsideQuotedText(text: string, index: number) {
+  const closingQuotes: string[] = [];
+  let doubleQuoteOpen = false;
+  let singleQuoteOpen = false;
+  const quotePairs: Record<string, string> = {
+    "“": "”",
+    "『": "』",
+    "「": "」",
+    "‘": "’"
+  };
+  for (const char of text.slice(0, index)) {
+    if (char === "\"") {
+      doubleQuoteOpen = !doubleQuoteOpen;
+      continue;
+    }
+    if (char === "'") {
+      singleQuoteOpen = !singleQuoteOpen;
+      continue;
+    }
+    const expectedClose = quotePairs[char];
+    if (expectedClose) {
+      closingQuotes.push(expectedClose);
+      continue;
+    }
+    if (closingQuotes.at(-1) === char) closingQuotes.pop();
+  }
+  return closingQuotes.length > 0 || doubleQuoteOpen || singleQuoteOpen;
 }
 
 function valueAfterPrefix(text: string, start: number) {

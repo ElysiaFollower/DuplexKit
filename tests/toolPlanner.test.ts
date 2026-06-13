@@ -4,9 +4,9 @@ import { DemoToolRuntime, parseAssistantToolDeclaration } from "../src/toolPlann
 
 describe("DemoToolRuntime", () => {
   it("instructs the realtime model to emit only one fixed declaration in tool mode", () => {
-    expect(DEFAULT_SYSTEM_ROLE).toContain("整轮回复只能包含下面某一个固定句式本身");
-    expect(DEFAULT_SYSTEM_ROLE).toContain("句式前后都不能添加任何解释");
-    expect(DEFAULT_SYSTEM_ROLE).toContain("工具调用声明说完后立即停止本轮回复");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("固定工具声明句");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("是保留字");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("不要在一轮里输出多个工具声明");
     expect(DEFAULT_SYSTEM_ROLE).toContain("设置终点并启动导航");
     expect(DEFAULT_SYSTEM_ROLE).toContain("不要声称工具结果已经返回");
     expect(DEFAULT_SYSTEM_ROLE).not.toContain("你可以简短闲聊");
@@ -30,6 +30,14 @@ describe("DemoToolRuntime", () => {
 
   it("plans tool calls when the assistant puts the fixed declaration after a sentence boundary", () => {
     expect(parseAssistantToolDeclaration("有这个可能，我再准确输入试试。我来调用地图工具：设置起点为208多媒体教室。")).toMatchObject({
+      action: "tool_call",
+      tool: "map.set_origin",
+      args: { place: "208多媒体教室" }
+    });
+  });
+
+  it("treats the reserved declaration phrase as a tool command anywhere outside quotes", () => {
+    expect(parseAssistantToolDeclaration("好的我来调用地图工具：设置起点为208多媒体教室。")).toMatchObject({
       action: "tool_call",
       tool: "map.set_origin",
       args: { place: "208多媒体教室" }

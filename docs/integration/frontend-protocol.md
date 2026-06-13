@@ -50,9 +50,9 @@
 
 后端会把这类消息打印到启动 `npm run dev` 的终端，并追加写入 `logs/client-debug/YYYY-MM-DD.jsonl`。该目录中的 `.jsonl` 文件是本地调试工件，不应提交。
 
-后端还会自动追加实时链路 trace 到 `logs/realtime-trace/YYYY-MM-DD.jsonl`。每行是一个 JSON 事件，包含 `sessionId`、`direction`、`event` 和可审计 payload。trace 记录后端能看到的关键边界：上游 ASR 文本、assistant 文本增量、`message_end`、Planner 决策、`tool_request`、应用端 `tool_result`、后端注入的 `ChatTTSText`、TTS 播放边界和错误。trace 不记录原始音频内容，只记录必要的音频块大小或边界事件。
+后端还会自动追加实时链路 trace 到 `logs/realtime-trace/YYYY-MM-DD.jsonl`。每行是一个 JSON 事件，包含 `sessionId`、`direction`、`event` 和可审计 payload。trace 记录后端能看到的关键边界：上游 ASR 文本、assistant 文本增量、`message_end`、Planner 决策、`tool_request`、应用端 `tool_result`、后端注入的 `ChatTTSText`、TTS 播放边界、工具结果播放抑制边界和错误。trace 不记录原始音频内容，只记录必要的音频块大小或边界事件。
 
-排查真机问题时，先用 `sessionId` 过滤最新 trace。起终点错误通常看 `asr.transcript`、`planner.decision`、`tool_request` 和 `tool_result`；语音被打断则看 `assistant.delta`、`tts_start/tts_end`、`chat_tts_text` 的时间顺序。
+排查真机问题时，先用 `sessionId` 过滤最新 trace。起终点错误通常看 `asr.transcript`、`planner.decision`、`tool_request` 和 `tool_result`；语音被打断则看 `assistant.delta`、`tts_start/tts_end`、`chat_tts_text`、`chat_tts_text_suppressed` 和 `audio.output_chunk_suppressed` 的时间顺序。
 
 ```json
 {
@@ -134,6 +134,6 @@
 }
 ```
 
-前端完成真实动作后，回传 `tool_result`。后端随后会把结果转成语音和文本注入给用户。
+前端完成真实动作后，回传 `tool_result`。后端会把结果作为结构化 `tool` 消息下发给前端调试/状态面板，并继续通过已验证的 `ChatTTSText` 路线注入给实时模型作为后续上下文；这段注入产生的文本和音频默认不再转发给前端，避免打断正常对话流。
 
 `control.kill` 是后端内部控制工具，不是小程序地图工具。当前小程序只需要实现上面的五个 app 工具。

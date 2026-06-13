@@ -332,3 +332,21 @@
     - session `218cbf1e-1316-49cf-ab81-7e89e4ea4ff6`：`navigate-beijing-south` -> ASR “导航到北京南站。”，Planner `navigation.start { place: "北京南站" }`，app 回传 `tool_result success 导航已启动...`。
   - 截图证据：`logs/device-acceptance/2026-06-13-after-connect-new-apk.png`、`logs/device-acceptance/2026-06-13-after-nav-fixture-new-apk.png`。
 - 仍需注意：`北京南站` 这类非金工小子室内地点目前会走 app 的既有 fallback 目的地，trace 中表现为 `108-2F04 钳工`；这不是本次 208/114 修复范围，后续若要支持外部地点需要单独定义产品行为。
+
+### 2026-06-13 - F010 工具结果注入保留 ChatTTSText 但抑制前端播放
+
+- 用户明确纠偏：不要把“工具结果不打断播放”理解成切换到 `ChatRAGText` 或静默丢弃上下文；应保留已验证的 `ChatTTSText` 后端注入路径，只是不把这段额外生成的文本/音频转发给前端播放。
+- 已修复：
+  - `sendChatTtsText` 增加 `forwardToClient` 选项；`tool_result` 调用使用 `forwardToClient: false`。
+  - 后端仍发送 `300 ChatTTSText` 给上游模型，让模型知道地图/导航动作结果。
+  - 后端向前端保留结构化 `tool` result，但不发送这段工具结果的 `assistant_text`，并在上游真正进入 `tts_type=chat_tts_text` 时才抑制音频块，避免误截断上一句正常回复尾音。
+  - Planner 提示词改成“我来调用{地图/导航/控制}工具”保留字扫描契约；Parser 允许保留字出现在整句任意非引号位置。
+- 决策约束已写入 `harness/decisions.md`：关键协议路径未经验证和用户确认不得从 `ChatTTSText` 切到 `ChatRAGText`。
+- 验证：
+  - `npm test -- tests/toolPlanner.test.ts tests/server.test.ts` -> 2 files / 25 tests passed。
+  - `npm test` -> 6 files / 36 tests passed。
+  - `npm run build` -> pass。
+  - `./scripts/harness-check.sh` -> pass。
+  - 真机 app 已通过 WebView DevTools 连接新后端，session `9b2dc984-7db5-4050-9b3e-6e07d553d832`；`npm run debug:realtime-fixture -- open-map` -> HTTP 200，48130 bytes。
+  - trace 证明链路为 `planner.decision map.open -> tool.started -> client tool_result 地图已打开 -> server_to_upstream chat_tts_text forwardToClient=false -> chat_tts_client_output_suppressed_start -> audio.output_chunk_suppressed -> chat_tts_client_output_suppressed_end`。
+  - 断言 `suppressed_before_suppressed_start=false`，即没有在工具结果注入 TTS 开始前抑制正常音频块。
