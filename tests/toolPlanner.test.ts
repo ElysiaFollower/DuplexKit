@@ -107,6 +107,21 @@ describe("DemoToolRuntime", () => {
     });
   });
 
+  it("plans navigation progress controls from conservative user intent", () => {
+    expect(parseUserToolIntent("下一步")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.next"
+    });
+    expect(parseUserToolIntent("上一步")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.previous"
+    });
+    expect(parseUserToolIntent("还剩多远")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.status"
+    });
+  });
+
   it("does not fallback vague chat into tool calls", () => {
     expect(parseUserToolIntent("你能介绍一下地图功能吗")).toMatchObject({
       action: "no_action"
@@ -147,6 +162,21 @@ describe("DemoToolRuntime", () => {
     expect(parseAssistantToolDeclaration("我来调用控制工具：取消当前工具调用。")).toMatchObject({
       action: "tool_call",
       tool: "control.kill"
+    });
+  });
+
+  it("plans navigation progress controls from assistant declarations", () => {
+    expect(parseAssistantToolDeclaration("我来调用导航工具：下一步。")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.next"
+    });
+    expect(parseAssistantToolDeclaration("我来调用导航工具：上一步。")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.previous"
+    });
+    expect(parseAssistantToolDeclaration("我来调用导航工具：播报当前进度。")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.status"
     });
   });
 

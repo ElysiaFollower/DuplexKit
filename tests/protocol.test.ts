@@ -76,11 +76,15 @@ describe("service protocol", () => {
       "map.close",
       "map.set_origin",
       "map.set_destination",
-      "navigation.start"
+      "navigation.start",
+      "navigation.next",
+      "navigation.previous",
+      "navigation.status"
     ]);
     expect(INTERNAL_CONTROL_TOOL_NAMES).toEqual(["control.kill"]);
     expect(protocol.textBoundaries.messageEndType).toBe("message_end");
     expect(protocol.clientMessages.map((message) => message.type)).toContain("client_debug");
+    expect(protocol.clientMessages.map((message) => message.type)).toContain("navigation_progress");
     expect(protocol.textBoundaries.emittedFor).toEqual(["asr_end", "llm_end", "tts_sentence_end", "tts_end"]);
     expect(protocol.outputAudio).toMatchObject({
       format: "pcm_f32le",

@@ -57,6 +57,27 @@ export const TOOL_DEFINITIONS = [
     examples: ["导航到北京南站", "启动导航"]
   },
   {
+    name: "navigation.next",
+    status: "bridge",
+    description: "导航过程中确认已经到达当前段的下一门点、楼梯口或转折点，并切换到下一段。",
+    parameters: { type: "object", properties: {}, required: [] },
+    examples: ["到达下一处", "下一步", "我到这个点了"]
+  },
+  {
+    name: "navigation.previous",
+    status: "bridge",
+    description: "导航过程中回退到上一段。",
+    parameters: { type: "object", properties: {}, required: [] },
+    examples: ["上一步", "回到上一段"]
+  },
+  {
+    name: "navigation.status",
+    status: "bridge",
+    description: "播报当前导航段、下一节点和剩余距离。无需参数。",
+    parameters: { type: "object", properties: {}, required: [] },
+    examples: ["我现在走到哪了", "还剩多远", "当前路线怎么样"]
+  },
+  {
     name: "control.kill",
     status: "bridge",
     description: "取消当前正在执行的工具调用。无需参数。",
@@ -272,6 +293,19 @@ export class DemoToolRuntime {
       };
     }
 
+    if (call.tool === "navigation.next" || call.tool === "navigation.previous" || call.tool === "navigation.status") {
+      const label = call.tool === "navigation.next" ? "切到下一段" : call.tool === "navigation.previous" ? "回到上一段" : "播报当前进度";
+      return {
+        toolCallId: call.toolCallId,
+        tool: call.tool,
+        status: "success",
+        summary: `已请求${label}`,
+        visibleResult: `地图导航已收到“${label}”请求。`,
+        origin: "fallback",
+        debugNote: `fallback ${call.tool}: no client navigation progress was available`
+      };
+    }
+
     this.map.opened = true;
     if (call.args.place) this.map.destination = call.args.place;
     this.map.navigating = true;
@@ -343,6 +377,15 @@ export function parseUserToolIntent(userText: string): PlannerDecision {
   }
   if (/^(开始|启动|继续)?导航$/.test(text)) {
     return { action: "tool_call", tool: "navigation.start", args: {}, spoken: "我来开始导航。" };
+  }
+  if (/^(下一步|下一个|到达|到达了|我到了|到这个点了|继续下一段|继续走)$/.test(text)) {
+    return { action: "tool_call", tool: "navigation.next", args: {}, spoken: "我来切到下一段。" };
+  }
+  if (/^(上一步|上一段|回退|回到上一段|退回上一段)$/.test(text)) {
+    return { action: "tool_call", tool: "navigation.previous", args: {}, spoken: "我来回到上一段。" };
+  }
+  if (/^(当前进度|播报当前进度|我现在在哪|我现在走到哪了|还剩多远|还有多远|当前路线怎么样|下一步怎么走)$/.test(text)) {
+    return { action: "tool_call", tool: "navigation.status", args: {}, spoken: "我来播报当前进度。" };
   }
 
   return { action: "no_action", reason: "user text did not match conservative direct tool intent" };
@@ -505,6 +548,24 @@ function findToolDeclarations(text: string): ParsedToolDeclaration[] {
     tool: "navigation.start",
     args: {},
     spoken: "我来调用导航工具：开始导航。"
+  });
+  pushFixedDeclarations(declarations, text, "我来调用导航工具:下一步", {
+    action: "tool_call",
+    tool: "navigation.next",
+    args: {},
+    spoken: "我来调用导航工具：下一步。"
+  });
+  pushFixedDeclarations(declarations, text, "我来调用导航工具:上一步", {
+    action: "tool_call",
+    tool: "navigation.previous",
+    args: {},
+    spoken: "我来调用导航工具：上一步。"
+  });
+  pushFixedDeclarations(declarations, text, "我来调用导航工具:播报当前进度", {
+    action: "tool_call",
+    tool: "navigation.status",
+    args: {},
+    spoken: "我来调用导航工具：播报当前进度。"
   });
   pushFixedDeclarations(declarations, text, "我来调用控制工具:取消当前工具调用", {
     action: "tool_call",

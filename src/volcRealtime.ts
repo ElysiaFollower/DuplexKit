@@ -16,6 +16,8 @@ import {
 } from "./toolPlanner.js";
 import {
   ClientDebugMessageSchema,
+  NavigationProgressSchema,
+  type NavigationProgressInput,
   normalizeToolResultInput,
   StopControlSchema,
   ToolResultInputSchema,
@@ -29,6 +31,8 @@ type PendingToolInvocation = {
   timeout: ReturnType<typeof setTimeout>;
   state: "waiting" | "resolved" | "timed_out";
 };
+
+const TOOL_RESULT_TIMEOUT_MS = 6000;
 
 const activeBridges = new Map<string, VolcRealtimeBridge>();
 let latestBridgeId = "";
@@ -123,6 +127,7 @@ class VolcRealtimeBridge {
   private suppressNextChatTtsClientOutput = false;
   private suppressingChatTtsClientOutput = false;
   private pendingAssistantPlanner: { turnId: string; assistantResponse: string } | null = null;
+  private latestNavigationProgress: NavigationProgressInput | undefined;
   private pendingToolCalls = new Map<string, PendingToolInvocation>();
 
   constructor(private readonly client: ClientSocket, private readonly config: RealtimeConfig) {
@@ -196,6 +201,12 @@ class VolcRealtimeBridge {
       const clientDebug = ClientDebugMessageSchema.safeParse(message);
       if (clientDebug.success) {
         this.handleClientDebug(clientDebug.data);
+        return;
+      }
+
+      const navigationProgress = NavigationProgressSchema.safeParse(message);
+      if (navigationProgress.success) {
+        this.handleNavigationProgress(navigationProgress.data);
         return;
       }
 
@@ -431,7 +442,7 @@ class VolcRealtimeBridge {
 
     const call = this.tools.start(turnId, decision);
     const request = this.buildToolRequest(call, decision.spoken);
-    const timeout = setTimeout(() => void this.resolvePendingToolCall(call.toolCallId), 1800);
+    const timeout = setTimeout(() => void this.resolvePendingToolCall(call.toolCallId), TOOL_RESULT_TIMEOUT_MS);
     this.pendingToolCalls.set(call.toolCallId, { call, timeout, state: "waiting" });
     this.trace("internal", "tool.started", { call, request });
     this.sendJson({ type: "tool", phase: "started", call });
@@ -454,6 +465,14 @@ class VolcRealtimeBridge {
     const normalized = this.tools.resolve(pending.call, result);
     this.trace("internal", "tool.resolved", { result: normalized });
     this.finalizeToolResult(normalized);
+  }
+
+  private handleNavigationProgress(progress: NavigationProgressInput) {
+    this.latestNavigationProgress = progress;
+    this.trace("client_to_server", "navigation_progress", progress);
+    this.sendJson({ type: "navigation", phase: "progress", progress });
+    if (!progress.announce || this.closed) return;
+    this.sendChatTtsText(navigationProgressPrompt(progress), "navigation_progress", { forwardToClient: true });
   }
 
   private handleClientDebug(message: {
@@ -584,6 +603,33 @@ type ParsedResponse =
   | ParsedSuccess
   | { error: true; code: number; payload: string };
 type ParsedSuccess = { event: number | null; payload: unknown; rawPayload: ByteBuffer; error?: false };
+
+function navigationProgressPrompt(progress: NavigationProgressInput) {
+  if (progress.completed) {
+    return `导航进度事实：用户已到达终点。请用一句简短中文确认到达，不要编造额外距离或时间。`;
+  }
+  return [
+    "导航进度事实：",
+    `路线：${progress.routeSummary}`,
+    `当前段：${progress.activeLegIndex + 1}/${progress.totalLegs}`,
+    `当前位置：${progress.fromLabel}`,
+    `下一节点：${progress.checkpointLabel}`,
+    `当前段距离：${Math.round(progress.distanceMeters)}米`,
+    `剩余距离：${Math.round(progress.remainingMeters)}米`,
+    `剩余预计：${formatDuration(progress.remainingSeconds)}`,
+    `地图指令：${progress.instruction}`,
+    "请用一句简短自然中文播报下一步，只能使用上面的距离和预计时间，不要自行估算，不要提到后端、JSON或结构化数据。"
+  ].join("\n");
+}
+
+function formatDuration(seconds: number) {
+  const rounded = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(rounded / 60);
+  const remain = rounded % 60;
+  if (minutes <= 0) return `${remain}秒`;
+  if (remain === 0) return `${minutes}分钟`;
+  return `${minutes}分${remain}秒`;
+}
 
 function packet(event: number, payload: unknown, sid?: string) {
   const payloadBytes = gzipSync(Buffer.from(JSON.stringify(payload)));

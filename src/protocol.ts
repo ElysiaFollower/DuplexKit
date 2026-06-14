@@ -6,7 +6,10 @@ export const APP_TOOL_NAMES = [
   "map.close",
   "map.set_origin",
   "map.set_destination",
-  "navigation.start"
+  "navigation.start",
+  "navigation.next",
+  "navigation.previous",
+  "navigation.status"
 ] as const;
 
 export const INTERNAL_CONTROL_TOOL_NAMES = ["control.kill"] as const;
@@ -42,9 +45,30 @@ export const ClientDebugMessageSchema = z.object({
   data: z.unknown().optional()
 });
 
+export const NavigationProgressSchema = z.object({
+  type: z.literal("navigation_progress"),
+  routeId: z.string().trim().min(1),
+  activeLegIndex: z.number().int().min(0),
+  totalLegs: z.number().int().min(1),
+  routeSummary: z.string().trim().min(1),
+  fromLabel: z.string().trim().min(1),
+  checkpointLabel: z.string().trim().min(1),
+  checkpointKind: z.string().trim().min(1),
+  instruction: z.string().trim().min(1),
+  distanceMeters: z.number().nonnegative(),
+  remainingMeters: z.number().nonnegative(),
+  remainingSeconds: z.number().nonnegative(),
+  completed: z.boolean().default(false),
+  announce: z.boolean().default(false),
+  reason: z.enum(["route_started", "step_changed", "manual_next", "manual_previous", "status_requested", "completed"])
+});
+
+export type NavigationProgressInput = z.infer<typeof NavigationProgressSchema>;
+
 export type ClientControlMessage =
   | z.infer<typeof StopControlSchema>
   | z.infer<typeof ClientDebugMessageSchema>
+  | z.infer<typeof NavigationProgressSchema>
   | ToolResultInput;
 
 export function normalizeToolResultInput(message: z.infer<typeof ToolResultInputSchema>): ToolResultInput {
@@ -110,6 +134,12 @@ export function buildRealtimeProtocol(config: {
         description: "调试模式下应用端回传本地环境、权限、WebSocket、麦克风和播放错误；后端只记录日志，不转发给实时模型。",
         required: ["event"],
         optional: ["level", "message", "at", "data"]
+      },
+      {
+        type: "navigation_progress",
+        description: "应用端地图回传当前导航段、下一门/楼梯/转折点、剩余距离和是否需要语音播报。后端只能依据该结构化事实回答导航进度，不自行猜测距离或时间。",
+        required: ["routeId", "activeLegIndex", "totalLegs", "routeSummary", "fromLabel", "checkpointLabel", "instruction", "distanceMeters", "remainingMeters", "remainingSeconds"],
+        optional: ["completed", "announce", "reason"]
       }
     ],
     serverMessages: [

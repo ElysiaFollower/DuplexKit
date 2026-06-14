@@ -107,7 +107,10 @@ describe("server", () => {
       "map.close",
       "map.set_origin",
       "map.set_destination",
-      "navigation.start"
+      "navigation.start",
+      "navigation.next",
+      "navigation.previous",
+      "navigation.status"
     ]);
     expect(response.json().promptTemplates.length).toBeGreaterThan(0);
     expect(body.realtimeProtocol.appToolNames).toEqual([
@@ -115,13 +118,17 @@ describe("server", () => {
       "map.close",
       "map.set_origin",
       "map.set_destination",
-      "navigation.start"
+      "navigation.start",
+      "navigation.next",
+      "navigation.previous",
+      "navigation.status"
     ]);
     expect(body.realtimeProtocol.internalControlToolNames).toEqual(["control.kill"]);
     expect(body.realtimeProtocol.textBoundaries.messageEndType).toBe("message_end");
     expect(body.realtimeProtocol.clientMessages[0].type).toBe("tool_result");
     expect(body.realtimeProtocol.clientMessages[0].description).toContain("ChatTTSText");
     expect(body.realtimeProtocol.clientMessages[0].description).toContain("默认不把这段注入产生的文本和音频转发给前端");
+    expect(body.realtimeProtocol.clientMessages.map((message: { type: string }) => message.type)).toContain("navigation_progress");
     expect(body.realtimeProtocol.serverMessages.map((message: { type: string }) => message.type)).toContain("message_end");
   });
 
