@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SYSTEM_ROLE } from "../src/runtimeSettings.js";
-import { DemoToolRuntime, parseAssistantToolDeclaration } from "../src/toolPlanner.js";
+import { DemoToolRuntime, parseAssistantToolDeclaration, parseUserToolIntent } from "../src/toolPlanner.js";
 
 describe("DemoToolRuntime", () => {
   it("instructs the realtime model to emit only one fixed declaration in tool mode", () => {
@@ -62,6 +62,34 @@ describe("DemoToolRuntime", () => {
 
   it("does not plan from user ASR-like text", () => {
     expect(parseAssistantToolDeclaration("导航到北京南站")).toMatchObject({
+      action: "no_action"
+    });
+  });
+
+  it("keeps direct user navigation intent as a separate conservative fallback", () => {
+    expect(parseUserToolIntent("导航到208多媒体教室")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.start",
+      args: { place: "208多媒体教室" }
+    });
+    expect(parseAssistantToolDeclaration("导航到208多媒体教室")).toMatchObject({
+      action: "no_action"
+    });
+  });
+
+  it("normalizes common spoken room numbers in user intent fallback", () => {
+    expect(parseUserToolIntent("导航到二零八多媒体教室")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.start",
+      args: { place: "208多媒体教室" }
+    });
+  });
+
+  it("does not fallback vague chat into tool calls", () => {
+    expect(parseUserToolIntent("你能介绍一下地图功能吗")).toMatchObject({
+      action: "no_action"
+    });
+    expect(parseUserToolIntent("我想看看后续输出内容能不能滚动显示")).toMatchObject({
       action: "no_action"
     });
   });

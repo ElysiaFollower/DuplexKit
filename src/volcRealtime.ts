@@ -402,9 +402,19 @@ class VolcRealtimeBridge {
   }
 
   private async runPlanner(assistantResponse: string, turnId = this.currentQuestionId || crypto.randomUUID()) {
-    const decision = this.tools.plan(assistantResponse);
-    this.trace("internal", "planner.decision", { turnId, assistantResponse, decision });
-    this.sendJson({ type: "planner", source: "assistant_response", assistantResponse, decision });
+    const strictDecision = this.tools.plan(assistantResponse);
+    const fallbackDecision = strictDecision.action === "no_action" ? this.tools.planFromUserIntent(this.latestTranscript) : strictDecision;
+    const source = strictDecision.action === "no_action" && fallbackDecision.action === "tool_call" ? "user_intent_fallback" : "assistant_response";
+    const decision = fallbackDecision;
+    this.trace("internal", "planner.decision", {
+      turnId,
+      source,
+      transcript: this.latestTranscript,
+      assistantResponse,
+      strictDecision,
+      decision
+    });
+    this.sendJson({ type: "planner", source, assistantResponse, transcript: this.latestTranscript, decision });
 
     if (decision.action !== "tool_call") return;
 

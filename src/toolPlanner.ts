@@ -135,6 +135,10 @@ export class DemoToolRuntime {
     return parseAssistantToolDeclaration(assistantResponse);
   }
 
+  planFromUserIntent(userText: string): PlannerDecision {
+    return parseUserToolIntent(userText);
+  }
+
   hasRunningCall() {
     return this.running.size > 0;
   }
@@ -311,6 +315,39 @@ export function parseAssistantToolDeclaration(assistantResponse: string): Planne
   return stripDeclarationIndex(navigation || declarations[0]);
 }
 
+export function parseUserToolIntent(userText: string): PlannerDecision {
+  const text = normalizeIntent(userText);
+  if (!text) return { action: "no_action", reason: "empty user text" };
+  if (DECLARATION_QUOTES.test(text)) return { action: "no_action", reason: "quoted text is not a direct command" };
+
+  if (isDirectMapOpenIntent(text)) {
+    return { action: "tool_call", tool: "map.open", args: {}, spoken: "我来打开地图。" };
+  }
+  if (isDirectMapCloseIntent(text)) {
+    return { action: "tool_call", tool: "map.close", args: {}, spoken: "我来关闭地图。" };
+  }
+
+  const origin = extractPlaceAfterIntent(text, ["设置起点为", "设置起点", "起点设为", "起点是", "从"]);
+  if (origin) {
+    return { action: "tool_call", tool: "map.set_origin", args: { place: origin }, spoken: `我来把起点设为${origin}。` };
+  }
+
+  const destination = extractPlaceAfterIntent(text, ["设置终点为", "设置终点", "终点设为", "终点是"]);
+  if (destination) {
+    return { action: "tool_call", tool: "map.set_destination", args: { place: destination }, spoken: `我来把终点设为${destination}。` };
+  }
+
+  const navigationTarget = extractPlaceAfterIntent(text, ["导航到", "带我去", "去到", "我要去", "到"]);
+  if (navigationTarget) {
+    return { action: "tool_call", tool: "navigation.start", args: { place: navigationTarget }, spoken: `我来导航到${navigationTarget}。` };
+  }
+  if (/^(开始|启动|继续)?导航$/.test(text)) {
+    return { action: "tool_call", tool: "navigation.start", args: {}, spoken: "我来开始导航。" };
+  }
+
+  return { action: "no_action", reason: "user text did not match conservative direct tool intent" };
+}
+
 export function toolStartedPrompt(call: ToolCallState, spoken: string) {
   return [
     `tool_call_id: ${call.toolCallId}`,
@@ -349,10 +386,52 @@ function normalizeDeclaration(text: string) {
   return text.replace(/\s+/g, "").replace(/：/g, ":").replace(/[。！？,.!?]+$/g, "");
 }
 
+function normalizeIntent(text: string) {
+  return text
+    .replace(/\s+/g, "")
+    .replace(/[，,。.!！?？；;]+$/g, "")
+    .replace(/二零八/g, "208")
+    .replace(/二百零八/g, "208")
+    .replace(/一零八/g, "108")
+    .replace(/一百零八/g, "108")
+    .replace(/一零四/g, "104")
+    .replace(/一百零四/g, "104")
+    .replace(/一零六/g, "106")
+    .replace(/一百零六/g, "106");
+}
+
 type ParsedToolDeclaration = Extract<PlannerDecision, { action: "tool_call" }> & { index: number };
 
 const DECLARATION_QUOTES = /[“”"『』「」'‘’]/;
 const DECLARATION_END = /[。！？,.!?；;，,]/;
+const INTENT_TRAILING_FILLER = /(?:可以吗|好不好|帮我|一下|吧|谢谢|麻烦你|请|呀|啊)+$/;
+
+function isDirectMapOpenIntent(text: string) {
+  return /^(打开|进入|显示|展示|切到|切换到)(3D|三维|精确)?地图(导航)?$/.test(text);
+}
+
+function isDirectMapCloseIntent(text: string) {
+  return /^(关闭|退出|收起)(3D|三维|精确)?地图(导航)?$/.test(text);
+}
+
+function extractPlaceAfterIntent(text: string, prefixes: string[]) {
+  for (const prefix of prefixes) {
+    if (!text.startsWith(prefix)) continue;
+    const place = sanitizeIntentPlace(text.slice(prefix.length));
+    if (isUsableIntentPlace(place)) return place;
+  }
+  return "";
+}
+
+function sanitizeIntentPlace(place: string) {
+  return place.replace(INTENT_TRAILING_FILLER, "").replace(/^(这个|那个)/, "").trim();
+}
+
+function isUsableIntentPlace(place: string) {
+  if (!place || place.length > 28) return false;
+  if (/^(哪里|哪儿|什么|一下|看看|地图|导航)$/.test(place)) return false;
+  return /[0-9A-Za-z\u4e00-\u9fa5]/.test(place);
+}
 
 function findToolDeclarations(text: string): ParsedToolDeclaration[] {
   const declarations: ParsedToolDeclaration[] = [];
