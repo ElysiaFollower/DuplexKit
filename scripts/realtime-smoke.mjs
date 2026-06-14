@@ -76,7 +76,7 @@ ws.addEventListener("message", async (message) => {
         speaker: process.env.VOLCENGINE_REALTIME_SPEAKER || "zh_female_vv_jupiter_bigtts"
       },
       dialog: {
-        bot_name: "豆包",
+        bot_name: "金工小子",
         system_role: "你是一个简短中文语音助手。",
         dialog_id: sessionId,
         speaking_style: "回答简短自然。",

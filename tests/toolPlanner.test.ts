@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { JINGONG_ROOMS } from "../src/jingongRooms.js";
 import { DEFAULT_SYSTEM_ROLE } from "../src/runtimeSettings.js";
 import { DemoToolRuntime, parseAssistantToolDeclaration, parseUserToolIntent } from "../src/toolPlanner.js";
 
@@ -6,12 +7,23 @@ describe("DemoToolRuntime", () => {
   it("instructs the realtime model to emit only one fixed declaration in tool mode", () => {
     expect(DEFAULT_SYSTEM_ROLE).toContain("金工小子");
     expect(DEFAULT_SYSTEM_ROLE).toContain("浙江大学紫金港校区金工中心");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("不能自称豆包");
     expect(DEFAULT_SYSTEM_ROLE).toContain("固定工具声明句");
     expect(DEFAULT_SYSTEM_ROLE).toContain("是保留字");
     expect(DEFAULT_SYSTEM_ROLE).toContain("不要在一轮里输出多个工具声明");
     expect(DEFAULT_SYSTEM_ROLE).toContain("设置终点并启动导航");
     expect(DEFAULT_SYSTEM_ROLE).toContain("不要声称工具结果已经返回");
     expect(DEFAULT_SYSTEM_ROLE).not.toContain("你可以简短闲聊");
+  });
+
+  it("keeps the full Jingong room catalog and access constraints in the realtime role", () => {
+    for (const room of JINGONG_ROOMS) {
+      expect(DEFAULT_SYSTEM_ROLE).toContain(room.roomNo);
+      expect(DEFAULT_SYSTEM_ROLE).toContain(room.name);
+    }
+    expect(DEFAULT_SYSTEM_ROLE).toContain("公共楼梯只连接公共二层与202平台相关区域");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("108-2F04");
+    expect(DEFAULT_SYSTEM_ROLE).toContain("只能经108内部楼梯到达");
   });
 
   it("plans map open from assistant declaration", () => {
@@ -82,6 +94,16 @@ describe("DemoToolRuntime", () => {
       action: "tool_call",
       tool: "navigation.start",
       args: { place: "208多媒体教室" }
+    });
+    expect(parseUserToolIntent("导航到一零八二楼F03教室")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.start",
+      args: { place: "108-2F03" }
+    });
+    expect(parseUserToolIntent("带我去202五号3D打印")).toMatchObject({
+      action: "tool_call",
+      tool: "navigation.start",
+      args: { place: "202-5" }
     });
   });
 

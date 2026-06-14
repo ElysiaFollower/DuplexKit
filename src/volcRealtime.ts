@@ -277,7 +277,7 @@ class VolcRealtimeBridge {
               speaker: runtimeSettings.speaker
             },
             dialog: {
-              bot_name: "豆包",
+              bot_name: "金工小子",
               system_role: runtimeSettings.systemRole,
               dialog_id: this.sessionId,
               speaking_style: runtimeSettings.speakingStyle,

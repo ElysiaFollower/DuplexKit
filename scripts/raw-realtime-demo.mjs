@@ -182,8 +182,8 @@ class RawBridge {
               speaker
             },
             dialog: {
-              bot_name: "豆包",
-              system_role: "你是一个实时语音助手。请正常对话，简短回答。",
+              bot_name: "金工小子",
+              system_role: "你是金工小子，是浙江大学紫金港校区金工中心的实时语音导航助手。请正常对话，简短回答，不要自称豆包或其他产品名。",
               dialog_id: this.sessionId,
               speaking_style: "自然、简短。",
               extra: { strict_audit: false, model: "1.2.1.1" }

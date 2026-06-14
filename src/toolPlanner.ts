@@ -390,14 +390,56 @@ function normalizeIntent(text: string) {
   return text
     .replace(/\s+/g, "")
     .replace(/[，,。.!！?？；;]+$/g, "")
-    .replace(/二零八/g, "208")
+    .replace(/二百一十/g, "210")
+    .replace(/二百零九/g, "209")
     .replace(/二百零八/g, "208")
-    .replace(/一零八/g, "108")
+    .replace(/二百零七/g, "207")
+    .replace(/二百零六/g, "206")
+    .replace(/二百零五/g, "205")
+    .replace(/二百零四/g, "204")
+    .replace(/二百零一/g, "201")
+    .replace(/二零九/g, "209")
+    .replace(/二零八/g, "208")
+    .replace(/二零七/g, "207")
+    .replace(/二零六/g, "206")
+    .replace(/二零五/g, "205")
+    .replace(/二零四/g, "204")
+    .replace(/二零一/g, "201")
+    .replace(/一百一十四/g, "114")
+    .replace(/一百一十三/g, "113")
+    .replace(/一百一十二/g, "112")
+    .replace(/一百一十一/g, "111")
+    .replace(/一百一十/g, "110")
+    .replace(/一百零九/g, "109")
     .replace(/一百零八/g, "108")
-    .replace(/一零四/g, "104")
+    .replace(/一百零七/g, "107")
+    .replace(/一百零六/g, "106")
     .replace(/一百零四/g, "104")
+    .replace(/一百零二/g, "102")
+    .replace(/一百零一/g, "101")
+    .replace(/一一四/g, "114")
+    .replace(/一一三/g, "113")
+    .replace(/一一二/g, "112")
+    .replace(/一一一/g, "111")
+    .replace(/一一零/g, "110")
+    .replace(/一零九/g, "109")
+    .replace(/一零八/g, "108")
+    .replace(/一零七/g, "107")
     .replace(/一零六/g, "106")
-    .replace(/一百零六/g, "106");
+    .replace(/一零四/g, "104")
+    .replace(/一零二/g, "102")
+    .replace(/一零一/g, "101")
+    .replace(/二楼/g, "2F")
+    .replace(/一楼/g, "1F")
+    .replace(/([0-9]{3})2FF?0?([1-9])/g, "$1-2F0$2")
+    .replace(/([0-9]{3})1FF?0?([1-9])/g, "$1-1F0$2")
+    .replace(/202五号/g, "202-5")
+    .replace(/202六号/g, "202-6")
+    .replace(/202七号/g, "202-7")
+    .replace(/202九号/g, "202-9")
+    .replace(/202十号/g, "202-10")
+    .replace(/202十一号/g, "202-11")
+    .replace(/202十二号/g, "202-12");
 }
 
 type ParsedToolDeclaration = Extract<PlannerDecision, { action: "tool_call" }> & { index: number };
@@ -424,7 +466,15 @@ function extractPlaceAfterIntent(text: string, prefixes: string[]) {
 }
 
 function sanitizeIntentPlace(place: string) {
-  return place.replace(INTENT_TRAILING_FILLER, "").replace(/^(这个|那个)/, "").trim();
+  return canonicalIntentPlace(place.replace(INTENT_TRAILING_FILLER, "").replace(/^(这个|那个)/, "").trim());
+}
+
+function canonicalIntentPlace(place: string) {
+  const exact202 = place.match(/^(202-(?:[1-7]|9|10|11|12))/);
+  if (exact202) return exact202[1];
+  const exactComplex = place.match(/^((?:104|108)-[12]F0?[1-9])/);
+  if (exactComplex) return exactComplex[1];
+  return place;
 }
 
 function isUsableIntentPlace(place: string) {
