@@ -10,6 +10,7 @@ const floatingLevelEl = document.querySelector("#floatingLevel");
 const floatingLevelTextEl = document.querySelector("#floatingLevelText");
 const systemRoleInput = document.querySelector("#systemRoleInput");
 const speakingStyleInput = document.querySelector("#speakingStyleInput");
+const speakerInput = document.querySelector("#speakerInput");
 const settingsStatusEl = document.querySelector("#settingsStatus");
 const saveSettingsBtn = document.querySelector("#saveSettingsBtn");
 const flowLogEl = document.querySelector("#flowLog");
@@ -72,9 +73,25 @@ async function loadRuntimeSettings() {
     runtimeSettingsSnapshot = data;
     systemRoleInput.value = data.settings?.systemRole || "";
     speakingStyleInput.value = data.settings?.speakingStyle || "";
+    renderSpeakerOptions(data.speakerPresets || [], data.settings?.speaker);
     settingsStatusEl.textContent = data.note || "Changes apply to next Start.";
   } catch (error) {
     settingsStatusEl.textContent = `settings failed: ${error.message}`;
+  }
+}
+
+function renderSpeakerOptions(presets, selectedSpeaker) {
+  speakerInput.innerHTML = "";
+  for (const preset of presets) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = `${preset.label} - ${preset.description}`;
+    speakerInput.appendChild(option);
+  }
+  if (selectedSpeaker) {
+    speakerInput.value = selectedSpeaker;
+  } else if (presets[0]) {
+    speakerInput.value = presets[0].id;
   }
 }
 
@@ -85,7 +102,8 @@ async function saveRuntimeSettings() {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       systemRole: systemRoleInput.value,
-      speakingStyle: speakingStyleInput.value
+      speakingStyle: speakingStyleInput.value,
+      speaker: speakerInput.value
     })
   });
   if (!response.ok) {
@@ -96,6 +114,7 @@ async function saveRuntimeSettings() {
   runtimeSettingsSnapshot = data;
   systemRoleInput.value = data.settings.systemRole;
   speakingStyleInput.value = data.settings.speakingStyle;
+  speakerInput.value = data.settings.speaker;
   settingsStatusEl.textContent = "saved; next Start uses it";
 }
 
@@ -166,7 +185,8 @@ function collectSessionLog() {
       loaded: runtimeSettingsSnapshot,
       editor: {
         systemRole: systemRoleInput.value,
-        speakingStyle: speakingStyleInput.value
+        speakingStyle: speakingStyleInput.value,
+        speaker: speakerInput.value
       }
     },
     tools: toolRegistrySnapshot,

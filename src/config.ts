@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { DEFAULT_REALTIME_SPEAKER, RealtimeSpeakerSchema } from "./runtimeSettings.js";
 
 const RawEnv = z.object({
   PORT: z.coerce.number().int().positive().default(5177),
@@ -16,7 +17,7 @@ const RawEnv = z.object({
   VOLCENGINE_REALTIME_ACCESS_TOKEN: z.string().optional(),
   VOLCENGINE_REALTIME_RESOURCE_ID: z.string().default("volc.speech.dialog"),
   VOLCENGINE_REALTIME_APP_KEY: z.string().default("PlgvMymc7f3tQnJ6"),
-  VOLCENGINE_REALTIME_SPEAKER: z.string().default("zh_female_vv_jupiter_bigtts"),
+  VOLCENGINE_REALTIME_SPEAKER: RealtimeSpeakerSchema.default(DEFAULT_REALTIME_SPEAKER),
   VOLCENGINE_REALTIME_SAMPLE_RATE: z.coerce.number().int().positive().default(24000)
 });
 

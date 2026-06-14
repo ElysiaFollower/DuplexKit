@@ -3,7 +3,12 @@ import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
 import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
-import { getRuntimeSettings, updateRuntimeSettings } from "./runtimeSettings.js";
+import {
+  getRuntimeSettings,
+  initializeRuntimeSettingsDefaults,
+  updateRuntimeSettings,
+  VOLCENGINE_REALTIME_SPEAKER_PRESETS
+} from "./runtimeSettings.js";
 import { saveSessionLog, SessionLogPayload } from "./sessionLogs.js";
 import { TOOL_DEFINITIONS, TOOL_PROMPT_TEMPLATES } from "./toolPlanner.js";
 import { attachVolcRealtimeBridge, injectRealtimeDebugAudio, listRealtimeDebugSessions } from "./volcRealtime.js";
@@ -13,6 +18,7 @@ import { loadRealtimeDebugFixturePcm, RealtimeDebugFixtureRequest } from "./real
 const appToolNameSet = new Set<string>(APP_TOOL_NAMES);
 
 export function buildServer(config: AppConfig = loadConfig()) {
+  initializeRuntimeSettingsDefaults({ speaker: config.realtime.speaker });
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     bodyLimit: 10 * 1024 * 1024
@@ -44,7 +50,8 @@ export function buildServer(config: AppConfig = loadConfig()) {
 
   app.get("/api/runtime-settings", async () => ({
     settings: getRuntimeSettings(),
-    note: "Main realtime system_role/speaking_style. Changes apply to the next realtime session."
+    speakerPresets: VOLCENGINE_REALTIME_SPEAKER_PRESETS,
+    note: "Main realtime system_role/speaking_style/speaker. Changes apply to the next realtime session."
   }));
 
   app.put("/api/runtime-settings", async (request) => ({

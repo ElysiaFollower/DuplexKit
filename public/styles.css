@@ -173,6 +173,16 @@ textarea {
   font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #c8ced8;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #fff;
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 .panel-note,
 .tool-item p,
 .protocol-notes p {

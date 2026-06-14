@@ -59,16 +59,40 @@ describe("server", () => {
     expect(before.statusCode).toBe(200);
     expect(before.json().settings.systemRole).toContain("金工小子");
     expect(before.json().settings.systemRole).toContain("中文语音导航助手");
+    expect(before.json().settings.speaker).toBe("zh_female_vv_jupiter_bigtts");
+    expect(before.json().speakerPresets.map((preset: { id: string }) => preset.id)).toEqual([
+      "zh_female_vv_jupiter_bigtts",
+      "zh_female_xiaohe_jupiter_bigtts",
+      "zh_male_yunzhou_jupiter_bigtts",
+      "zh_male_xiaotian_jupiter_bigtts"
+    ]);
 
     const updated = await app.inject({
       method: "PUT",
       url: "/api/runtime-settings",
-      payload: { systemRole: "你是测试助手。", speakingStyle: "短句。" }
+      payload: { systemRole: "你是测试助手。", speakingStyle: "短句。", speaker: "zh_male_yunzhou_jupiter_bigtts" }
     });
 
     expect(updated.statusCode).toBe(200);
     expect(updated.json().settings.systemRole).toBe("你是测试助手。");
     expect(updated.json().settings.speakingStyle).toBe("短句。");
+    expect(updated.json().settings.speaker).toBe("zh_male_yunzhou_jupiter_bigtts");
+  });
+
+  it("uses configured realtime speaker as runtime default", async () => {
+    const app = buildServer(
+      loadConfig({
+        APP_ID: "app-id",
+        ACCESS_TOKEN: "token",
+        VOLCENGINE_REALTIME_SPEAKER: "zh_male_xiaotian_jupiter_bigtts"
+      })
+    );
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/runtime-settings" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().settings.speaker).toBe("zh_male_xiaotian_jupiter_bigtts");
   });
 
   it("serves tool registry metadata", async () => {

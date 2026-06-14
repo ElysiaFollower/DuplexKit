@@ -258,13 +258,13 @@ class VolcRealtimeBridge {
     }
     if (!this.connectionStarted) {
       this.connectionStarted = true;
-      const runtimeSettings = getRuntimeSettings();
       this.trace("upstream_to_server", "connection.started", {
         event: parsed.event,
         eventName: parsed.event ? eventNames.get(parsed.event) : undefined
       });
+      const runtimeSettings = getRuntimeSettings();
       this.trace("server_to_upstream", "session.start", {
-        speaker: this.config.speaker,
+        speaker: runtimeSettings.speaker,
         speakingStyle: runtimeSettings.speakingStyle
       });
       this.sendJson({ type: "status", state: "starting-session" });
@@ -274,7 +274,7 @@ class VolcRealtimeBridge {
           {
             tts: {
               audio_config: { channel: 1, format: "pcm", sample_rate: this.config.sampleRate },
-              speaker: this.config.speaker
+              speaker: runtimeSettings.speaker
             },
             dialog: {
               bot_name: "豆包",
