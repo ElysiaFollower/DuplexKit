@@ -3,6 +3,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
 import { getConfigStatus, loadConfig, type AppConfig } from "./config.js";
+import { jingongRoomCatalogPayload } from "./jingongRooms.js";
 import {
   getRuntimeSettings,
   initializeRuntimeSettingsDefaults,
@@ -63,6 +64,8 @@ export function buildServer(config: AppConfig = loadConfig()) {
     promptTemplates: TOOL_PROMPT_TEMPLATES,
     realtimeProtocol: buildRealtimeProtocol(config.realtime)
   }));
+
+  app.get("/api/jingong-rooms", async () => jingongRoomCatalogPayload());
 
   app.get("/api/debug/realtime-sessions", async () => ({
     sessions: listRealtimeDebugSessions()

@@ -86,3 +86,11 @@ export function jingongRoomKnowledgeText() {
     `空间通行约束：${JINGONG_ACCESS_RULES.join(" ")}`
   ].join("\n");
 }
+
+export function jingongRoomCatalogPayload() {
+  return {
+    rooms: JINGONG_ROOMS,
+    accessRules: JINGONG_ACCESS_RULES,
+    knowledgeText: jingongRoomKnowledgeText()
+  };
+}

@@ -125,6 +125,20 @@ describe("server", () => {
     expect(body.realtimeProtocol.serverMessages.map((message: { type: string }) => message.type)).toContain("message_end");
   });
 
+  it("serves Jingong room catalog metadata for frontend and device diagnostics", async () => {
+    const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/jingong-rooms" });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.rooms.length).toBeGreaterThanOrEqual(53);
+    expect(body.rooms.map((room: { id: string }) => room.id)).toContain("108-2F03");
+    expect(body.rooms.map((room: { id: string }) => room.id)).toContain("202-5");
+    expect(body.accessRules.join(" ")).toContain("公共楼梯");
+    expect(body.knowledgeText).toContain("不能直接到达104、106、108的独立二层");
+  });
+
   it("saves structured session logs inside the repo", async () => {
     const app = buildServer(loadConfig({ APP_ID: "app-id", ACCESS_TOKEN: "token" }));
     apps.push(app);
