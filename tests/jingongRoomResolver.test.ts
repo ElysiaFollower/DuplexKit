@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveRoomId, roomLabel } from "../apps/jingongxiaozi/src/duplexkit/roomResolver.js";
+import { resolveRoomId, roomLabel } from "../../../src/duplexkit/roomResolver.ts";
 
 describe("jingongxiaozi room resolver", () => {
   it("prefers a specific room number and name over generic classroom matches", () => {

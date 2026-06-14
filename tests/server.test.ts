@@ -57,7 +57,8 @@ describe("server", () => {
 
     const before = await app.inject({ method: "GET", url: "/api/runtime-settings" });
     expect(before.statusCode).toBe(200);
-    expect(before.json().settings.systemRole).toContain("中文语音助手");
+    expect(before.json().settings.systemRole).toContain("金工小子");
+    expect(before.json().settings.systemRole).toContain("中文语音导航助手");
 
     const updated = await app.inject({
       method: "PUT",
