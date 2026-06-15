@@ -94,3 +94,32 @@ export function jingongRoomCatalogPayload() {
     knowledgeText: jingongRoomKnowledgeText()
   };
 }
+
+function normalizeRoomQuery(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/房间|教室|实验室|办公室|训练|导航|去|到/g, "");
+}
+
+export function resolveRoomId(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = normalizeRoomQuery(raw);
+  const candidates = [...JINGONG_ROOMS].sort((a, b) => b.id.length - a.id.length || b.roomNo.length - a.roomNo.length);
+  const exact = candidates.find((room) => {
+    const roomTokens = [room.id, room.roomNo, ...room.aliases].map(normalizeRoomQuery);
+    return roomTokens.some((token) => token && token === normalized);
+  });
+  if (exact) return exact.id;
+  const partial = candidates.find((room) => {
+    const roomTokens = [room.id, room.roomNo, ...room.aliases].map(normalizeRoomQuery);
+    return roomTokens.some((token) => token && normalized.includes(token));
+  });
+  return partial?.id || "";
+}
+
+export function roomLabel(roomId: string) {
+  const room = JINGONG_ROOMS.find((candidate) => candidate.id === roomId);
+  return room ? `${room.roomNo} ${room.name}` : roomId;
+}

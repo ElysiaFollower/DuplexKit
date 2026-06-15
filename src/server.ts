@@ -1,4 +1,5 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
@@ -95,7 +96,7 @@ export function buildServer(config: AppConfig = loadConfig()) {
   return app;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const config = loadConfig();
   const app = buildServer(config);
   app.listen({ port: config.port, host: "0.0.0.0" }).catch((error) => {

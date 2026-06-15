@@ -5,6 +5,7 @@ import {
   ClientDebugMessageSchema,
   INTERNAL_CONTROL_TOOL_NAMES,
   normalizeToolResultInput,
+  NavigationProgressSchema,
   ToolResultInputSchema,
   toToolRequestPayload
 } from "../src/protocol.js";
@@ -64,6 +65,49 @@ describe("service protocol", () => {
     });
   });
 
+  it("accepts structured navigation progress from the mobile and mini program maps", () => {
+    const parsed = NavigationProgressSchema.parse({
+      type: "navigation_progress",
+      routeId: "101->202-5",
+      startRoomId: "101",
+      targetRoomId: "202-5",
+      activeLegIndex: 1,
+      totalLegs: 9,
+      completedLegs: 1,
+      remainingLegs: 7,
+      remainingMeters: 75,
+      remainingSeconds: 111,
+      current: { nodeId: "door-101", label: "101 门口", floor: "1F" },
+      next: { nodeId: "c1-101", label: "走廊入口", floor: "1F", kind: "door", distanceMeters: 1, instruction: "出门进入走廊" },
+      destination: { roomId: "202-5", label: "202-5", floor: "2F" },
+      guidance: {
+        phase: "walk",
+        userAction: "confirm_next",
+        currentSegmentLabel: "101 门口 → 走廊入口",
+        nextActionLabel: "到达该节点后点下一步，或说下一步",
+        canManualAdvance: true,
+        canVoiceAdvance: true
+      },
+      heading: {
+        calibrated: true,
+        available: true,
+        bearingDegrees: 18,
+        status: "朝向已校准。"
+      },
+      canGoPrevious: true,
+      canGoNext: true,
+      isFinalLeg: false,
+      ttsPrompt: "第 2 段，出门进入走廊，到走廊入口，约 1 米。",
+      announce: true,
+      reason: "manual_next"
+    });
+
+    expect(parsed.next?.label).toBe("走廊入口");
+    expect(parsed.guidance?.userAction).toBe("confirm_next");
+    expect(parsed.heading?.calibrated).toBe(true);
+    expect(parsed.remainingMeters).toBe(75);
+  });
+
   it("publishes stable app protocol metadata", () => {
     const protocol = buildRealtimeProtocol({
       inputFormat: "pcm_s16le",
@@ -85,6 +129,9 @@ describe("service protocol", () => {
     expect(protocol.textBoundaries.messageEndType).toBe("message_end");
     expect(protocol.clientMessages.map((message) => message.type)).toContain("client_debug");
     expect(protocol.clientMessages.map((message) => message.type)).toContain("navigation_progress");
+    const navigationProgress = protocol.clientMessages.find((message) => message.type === "navigation_progress");
+    expect(navigationProgress?.optional).toContain("guidance");
+    expect(navigationProgress?.optional).toContain("heading");
     expect(protocol.textBoundaries.emittedFor).toEqual(["asr_end", "llm_end", "tts_sentence_end", "tts_end"]);
     expect(protocol.outputAudio).toMatchObject({
       format: "pcm_f32le",

@@ -48,19 +48,76 @@ export const ClientDebugMessageSchema = z.object({
 export const NavigationProgressSchema = z.object({
   type: z.literal("navigation_progress"),
   routeId: z.string().trim().min(1),
+  startRoomId: z.string().trim().min(1).optional(),
+  targetRoomId: z.string().trim().min(1).optional(),
   activeLegIndex: z.number().int().min(0),
   totalLegs: z.number().int().min(1),
-  routeSummary: z.string().trim().min(1),
-  fromLabel: z.string().trim().min(1),
-  checkpointLabel: z.string().trim().min(1),
-  checkpointKind: z.string().trim().min(1),
-  instruction: z.string().trim().min(1),
-  distanceMeters: z.number().nonnegative(),
+  completedLegs: z.number().int().min(0).optional(),
+  remainingLegs: z.number().int().min(0).optional(),
+  totalMeters: z.number().nonnegative().optional(),
+  estimatedSeconds: z.number().nonnegative().optional(),
+  routeSummary: z.string().trim().min(1).optional(),
+  fromLabel: z.string().trim().min(1).optional(),
+  checkpointLabel: z.string().trim().min(1).optional(),
+  checkpointKind: z.string().trim().min(1).optional(),
+  instruction: z.string().trim().min(1).optional(),
+  distanceMeters: z.number().nonnegative().optional(),
   remainingMeters: z.number().nonnegative(),
   remainingSeconds: z.number().nonnegative(),
+  current: z.object({
+    nodeId: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    floor: z.string().trim().min(1)
+  }).optional(),
+  next: z.object({
+    nodeId: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    floor: z.string().trim().min(1),
+    kind: z.string().trim().min(1),
+    distanceMeters: z.number().nonnegative(),
+    instruction: z.string().trim().min(1)
+  }).optional(),
+  previous: z.object({
+    nodeId: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    floor: z.string().trim().min(1)
+  }).optional(),
+  destination: z.object({
+    roomId: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    floor: z.string().trim().min(1)
+  }).optional(),
+  guidance: z.object({
+    phase: z.enum(["depart", "walk", "transition", "arrive"]),
+    userAction: z.enum(["confirm_next", "confirm_arrival"]),
+    currentSegmentLabel: z.string().trim().min(1),
+    nextActionLabel: z.string().trim().min(1),
+    canManualAdvance: z.boolean(),
+    canVoiceAdvance: z.boolean()
+  }).optional(),
+  heading: z.object({
+    calibrated: z.boolean(),
+    available: z.boolean(),
+    bearingDegrees: z.number().optional(),
+    status: z.string().trim().min(1)
+  }).optional(),
+  canGoPrevious: z.boolean().optional(),
+  canGoNext: z.boolean().optional(),
+  isFinalLeg: z.boolean().optional(),
+  ttsPrompt: z.string().trim().optional(),
+  source: z.string().trim().optional(),
   completed: z.boolean().default(false),
   announce: z.boolean().default(false),
-  reason: z.enum(["route_started", "step_changed", "manual_next", "manual_previous", "status_requested", "completed"])
+  reason: z.string().trim().min(1).default("step_changed")
+}).superRefine((value, ctx) => {
+  const hasLegacy = Boolean(value.routeSummary && value.fromLabel && value.checkpointLabel && value.instruction && value.distanceMeters !== undefined);
+  const hasStructured = Boolean(value.current && value.next && value.destination);
+  if (!hasLegacy && !hasStructured) {
+    ctx.addIssue({
+      code: "custom",
+      message: "navigation_progress must include either legacy routeSummary/fromLabel/checkpointLabel/instruction facts or structured current/next/destination facts"
+    });
+  }
 });
 
 export type NavigationProgressInput = z.infer<typeof NavigationProgressSchema>;
@@ -138,8 +195,23 @@ export function buildRealtimeProtocol(config: {
       {
         type: "navigation_progress",
         description: "应用端地图回传当前导航段、下一门/楼梯/转折点、剩余距离和是否需要语音播报。后端只能依据该结构化事实回答导航进度，不自行猜测距离或时间。",
-        required: ["routeId", "activeLegIndex", "totalLegs", "routeSummary", "fromLabel", "checkpointLabel", "instruction", "distanceMeters", "remainingMeters", "remainingSeconds"],
-        optional: ["completed", "announce", "reason"]
+        required: ["routeId", "activeLegIndex", "totalLegs", "remainingMeters", "remainingSeconds"],
+        optional: [
+          "current",
+          "next",
+          "destination",
+          "guidance",
+          "heading",
+          "ttsPrompt",
+          "routeSummary",
+          "fromLabel",
+          "checkpointLabel",
+          "instruction",
+          "distanceMeters",
+          "completed",
+          "announce",
+          "reason"
+        ]
       }
     ],
     serverMessages: [

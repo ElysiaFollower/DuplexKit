@@ -17,6 +17,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:local": "scripts/local-smoke.sh",
     "config:check": "node dist/scripts/config-check.js",
+    "smoke:navigation-progress": "node scripts/navigation-progress-smoke.mjs",
+    "smoke:navigation-progress:local": "scripts/navigation-progress-local-smoke.sh",
     "smoke:realtime": "node scripts/realtime-smoke.mjs",
     "smoke:bridge": "node scripts/realtime-bridge-smoke.mjs",
     "raw:realtime": "node scripts/raw-realtime-demo.mjs"

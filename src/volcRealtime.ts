@@ -32,7 +32,7 @@ type PendingToolInvocation = {
   state: "waiting" | "resolved" | "timed_out";
 };
 
-const TOOL_RESULT_TIMEOUT_MS = 6000;
+const TOOL_RESULT_TIMEOUT_MS = 20000;
 
 const activeBridges = new Map<string, VolcRealtimeBridge>();
 let latestBridgeId = "";
@@ -608,18 +608,37 @@ function navigationProgressPrompt(progress: NavigationProgressInput) {
   if (progress.completed) {
     return `导航进度事实：用户已到达终点。请用一句简短中文确认到达，不要编造额外距离或时间。`;
   }
+  const routeSummary = progress.routeSummary || `${progress.startRoomId || "起点"} → ${progress.targetRoomId || progress.destination?.label || "终点"}`;
+  const fromLabel = progress.fromLabel || progress.current?.label || "当前位置";
+  const checkpointLabel = progress.checkpointLabel || progress.next?.label || "下一处";
+  const instruction = progress.instruction || progress.next?.instruction || "继续按地图路线前进";
+  const distanceMeters = progress.distanceMeters ?? progress.next?.distanceMeters ?? 0;
+  const actionHint =
+    progress.guidance?.userAction === "confirm_arrival"
+      ? "到达后请提醒用户点击完成，或说已到达。"
+      : progress.guidance?.nextActionLabel || "到达该节点后请提醒用户点击下一步，或说下一步。";
+  const headingHint = progress.heading
+    ? progress.heading.available
+      ? progress.heading.calibrated
+        ? `朝向状态：${progress.heading.status}`
+        : `朝向状态：${progress.heading.status} 可以建议用户先校准方向。`
+      : `朝向状态：${progress.heading.status}`
+    : "";
   return [
     "导航进度事实：",
-    `路线：${progress.routeSummary}`,
+    `路线：${routeSummary}`,
     `当前段：${progress.activeLegIndex + 1}/${progress.totalLegs}`,
-    `当前位置：${progress.fromLabel}`,
-    `下一节点：${progress.checkpointLabel}`,
-    `当前段距离：${Math.round(progress.distanceMeters)}米`,
+    progress.guidance?.currentSegmentLabel ? `当前节点关系：${progress.guidance.currentSegmentLabel}` : "",
+    `当前位置：${fromLabel}`,
+    `下一节点：${checkpointLabel}`,
+    `当前段距离：${Math.round(distanceMeters)}米`,
     `剩余距离：${Math.round(progress.remainingMeters)}米`,
     `剩余预计：${formatDuration(progress.remainingSeconds)}`,
-    `地图指令：${progress.instruction}`,
+    `地图指令：${progress.ttsPrompt || instruction}`,
+    `用户操作：${actionHint}`,
+    headingHint,
     "请用一句简短自然中文播报下一步，只能使用上面的距离和预计时间，不要自行估算，不要提到后端、JSON或结构化数据。"
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function formatDuration(seconds: number) {
