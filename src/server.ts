@@ -26,6 +26,17 @@ export function buildServer(config: AppConfig = loadConfig()) {
     bodyLimit: 10 * 1024 * 1024
   });
 
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("Access-Control-Allow-Origin", request.headers.origin ?? "*");
+    reply.header("Vary", "Origin");
+    reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+    reply.header("Access-Control-Allow-Headers", "content-type,authorization");
+    reply.header("Access-Control-Max-Age", "86400");
+    if (request.method === "OPTIONS") {
+      return reply.status(204).send();
+    }
+  });
+
   app.register(async (routes) => {
     await routes.register(fastifyWebsocket);
     routes.route({
